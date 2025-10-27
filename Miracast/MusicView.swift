@@ -39,13 +39,13 @@ struct MusicView: View {
                     .padding(.horizontal, 16)
                 // Список сервисов
                 VStack(spacing: 0) {
-                    MusicServiceRow(icon: "applelogo", iconColor: .black, text: "Apple Music") {
+                    MusicServiceRow(iconAssetName: "Music/apple_icon", text: "Apple Music") {
                         handleAppleMusicTap()
                     }
                     Divider().padding(.leading, 56)
-                    MusicServiceRow(icon: "safari", iconColor: Color(red: 0.22, green: 0.51, blue: 0.97), text: "Safari")
+                    MusicServiceRow(iconAssetName: "Music/safari_icon", text: "Safari")
                     Divider().padding(.leading, 56)
-                    MusicServiceRow(icon: "play.rectangle.fill", iconColor: Color(red: 1, green: 0.27, blue: 0.23), text: "YouTube Music")
+                    MusicServiceRow(iconAssetName: "Music/youtubemusic_icon", text: "YouTube Music")
                 }
                 .background(Color.white.opacity(0.2))
                 .cornerRadius(16)
@@ -106,8 +106,7 @@ struct MusicView: View {
 }
 
 struct MusicServiceRow: View {
-    let icon: String
-    let iconColor: Color
+    let iconAssetName: String
     let text: String
     var onTap: (() -> Void)? = nil
     var body: some View {
@@ -115,17 +114,12 @@ struct MusicServiceRow: View {
             onTap?()
         }) {
             HStack(spacing: 0) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 40, height: 40)
-                    Image(systemName: icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(iconColor)
-                }
-                .padding(.leading, 8)
+                Image(iconAssetName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+                    .padding(.leading, 8)
                 Text(text)
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.black)

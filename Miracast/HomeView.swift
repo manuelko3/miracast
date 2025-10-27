@@ -4,20 +4,20 @@ struct HomeView: View {
     @State private var showCastScreen = false
 
     let services: [HomeService] = [
-        .init(icon: "airplayvideo", iconColor: Color(red: 1, green: 0.36, blue: 0.27), text: "Screen Cast"),
-        .init(icon: "photo.on.rectangle", iconColor: Color(red: 0.22, green: 0.51, blue: 0.97), text: "Photos"),
-        .init(icon: "video", iconColor: Color(red: 1, green: 0.27, blue: 0.56), text: "Videos"),
-        .init(icon: "rectangle.on.rectangle.angled", iconColor: Color(red: 0.54, green: 0.27, blue: 0.97), text: "Slide - Show"),
-        .init(icon: "youtube", text: "Youtube", isAsset: true),
-        .init(icon: "tiktok", text: "Tik Tok", isAsset: true),
-        .init(icon: "twitch", text: "Twitch", isAsset: true),
-        .init(icon: "kick", text: "Kick", isAsset: true),
-        .init(icon: "netflix", text: "Netflix", isAsset: true),
-        .init(icon: "doc", text: "Documents", isAsset: true),
-        .init(icon: "presentations", text: "Presentations", isAsset: true),
-        .init(icon: "whiteboard", text: "Whiteboard", isAsset: true),
-        .init(icon: "safari", iconColor: Color(red: 0.22, green: 0.51, blue: 0.97), text: "Browser"),
-        .init(icon: "gamecontroller", iconColor: Color(red: 0.22, green: 0.51, blue: 0.97), text: "Games")
+        .init(icon: "Main/screencast_icon", text: "Screen Cast", isAsset: true),
+        .init(icon: "Main/photos_icon", text: "Photos", isAsset: true),
+        .init(icon: "Main/videos_icon", text: "Videos", isAsset: true),
+        .init(icon: "Main/slideshow_icon", text: "Slide - Show", isAsset: true),
+        .init(icon: "Main/youtube_icon", text: "Youtube", isAsset: true),
+        .init(icon: "Main/tiktok_icon", text: "Tik Tok", isAsset: true),
+        .init(icon: "Main/twitch_icon", text: "Twitch", isAsset: true),
+        .init(icon: "Main/kick_icon", text: "Kick", isAsset: true),
+        .init(icon: "Main/netflix_icon", text: "Netflix", isAsset: true),
+        .init(icon: "Main/word_icon", text: "Documents", isAsset: true),
+        .init(icon: "Main/presentation_icon", text: "Presentations", isAsset: true),
+        .init(icon: "Main/whiteboard_icon", text: "Whiteboard", isAsset: true),
+        .init(icon: "Main/browser_icon", text: "Browser", isAsset: true),
+        .init(icon: "Main/games_icon", text: "Games", isAsset: true)
     ]
     var body: some View {
         ZStack {
@@ -38,10 +38,12 @@ struct HomeView: View {
                 // Список сервисов
                 List {
                     Section {
-                        ForEach(services) { service in
-                            HomeServiceRow(icon: service.icon, iconColor: service.iconColor, text: service.text, isAsset: service.isAsset)
+                        ForEach(services.indices, id: \.self) { idx in
+                            let service = services[idx]
+                            HomeServiceRow(icon: service.icon, iconColor: service.iconColor, text: service.text, isAsset: service.isAsset, showDivider: idx != services.count - 1)
                                 .listRowInsets(EdgeInsets())
                                 .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     if service.text == "Screen Cast" {
@@ -51,6 +53,7 @@ struct HomeView: View {
                         }
                     }
                 }
+                .scrollIndicators(.hidden) // скрываем индикатор прокрутки (iOS 16+)
                 .listStyle(PlainListStyle())
                 .background(Color.clear)
                 .cornerRadius(16)
@@ -87,37 +90,52 @@ struct HomeServiceRow: View {
     var iconColor: Color? = nil
     let text: String
     var isAsset: Bool = false
+    var showDivider: Bool = true
     var body: some View {
-        HStack(spacing: 0) {
-            ZStack {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 40, height: 40)
-                if isAsset {
-                    Image(icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 28, height: 28)
-                } else {
-                    Image(systemName: icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(iconColor ?? .black)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                ZStack {
+                    // Крупный круг 50x50
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 50, height: 50)
+
+                    if isAsset {
+                        // Если картинка из ассетов — заполняем весь круг и обрезаем по форме
+                        Image(icon)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 50, height: 50)
+                            .clipShape(Circle())
+                    } else {
+                        // Для SF Symbol оставляем внутри круга центрированную иконку
+                        Image(systemName: icon)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(iconColor ?? .black)
+                    }
                 }
+                .padding(.leading, 8)
+
+                Text(text)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.black)
+                    .padding(.leading, 12)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(Color.gray.opacity(0.6))
+                    .padding(.trailing, 8)
             }
-            .padding(.leading, 8)
-            Text(text)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(.black)
-                .padding(.leading, 12)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundColor(Color.gray.opacity(0.6))
-                .padding(.trailing, 8)
+            .frame(height: 82)
+            .background(Color.clear)
+
+            if showDivider {
+                Divider()
+                    .background(Color.gray.opacity(0.3))
+                    .padding(.horizontal, 8) // уменьшил отступы, чтобы разделитель был длиннее
+            }
         }
-        .frame(height: 82)
-        .background(Color.clear)
     }
 }
 

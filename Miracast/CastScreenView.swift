@@ -4,167 +4,157 @@ struct CastScreenView: View {
     @Environment(\.dismiss) var dismiss
     @State private var autoRotate = false
     @State private var sound = false
+    @State private var isCasting = false // добавлено состояние для переключения кнопки
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.white
-                    .ignoresSafeArea()
+        ZStack {
+            Color.white
+                .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    // Верхняя панель с кнопкой закрытия
-                    HStack {
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            // Кастомная кнопка закрытия: одна серая окружность и тёмный крестик
-                            ZStack {
-                                Circle()
-                                    .fill(Color(red: 245/255, green: 246/255, blue: 248/255)) // светлый серый фон
-                                    .frame(width: 44, height: 44)
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 18, weight: .semibold)) // увеличил размер крестика с 16 -> 18
-                                    .foregroundColor(Color(red: 153/255, green: 153/255, blue: 153/255))
+            VStack(spacing: 0) {
+                // Верхняя область: drag indicator + заголовок с кнопкой закрытия слева
+                VStack(spacing: 6) {
+                    // drag indicator
+                    Capsule()
+                        .fill(Color.gray.opacity(0.35))
+                        .frame(width: 36, height: 5)
+                        .padding(.top, 6)
+
+                    ZStack {
+                        // Центрированный заголовок
+                        Text("Cast Screen")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.black)
+
+                        // Левая кнопка закрытия
+                        HStack {
+                            Button(action: { dismiss() }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color(red: 245/255, green: 246/255, blue: 248/255))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 22, weight: .semibold))
+                                        .foregroundColor(Color(red: 153/255, green: 153/255, blue: 153/255))
+                                }
+                                .frame(width: 44, height: 44)
+                                .contentShape(Circle())
+                                .accessibilityLabel("Close")
                             }
-                            .frame(width: 44, height: 44)
-                            .contentShape(Circle())
-                            .accessibilityLabel("Close")
+                            Spacer()
                         }
-                        Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    .frame(height: 44)
+                }
+                .padding(.horizontal, 16)
 
-                    // Заголовок
-                    Text("Cast Screen")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 8)
-
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Описание
-                            Text("Everything on your screen, including notifications, will be recorded")
-                                .font(.system(size: 14))
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
-                                .padding(.top, 8)
-
-                            // Настройки
-                            Text("Settings")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                                .padding(.top, 16)
-
-                            // Auto-Rotate
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color(red: 0.22, green: 0.51, blue: 0.97))
-                                        .frame(width: 44, height: 44)
-                                    Image(systemName: "arrow.clockwise")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 20, height: 20)
-                                        .foregroundColor(.white)
-                                }
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Auto-Rotate")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.black)
-                                    Text("Content on your TV Will be in horizontal orientation")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.gray)
-                                        .lineLimit(2)
-                                }
-
-                                Spacer()
-
-                                Toggle("", isOn: $autoRotate)
-                                    .labelsHidden()
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                            .padding(.horizontal, 16)
-
-                            // Sound
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color(red: 0.22, green: 0.51, blue: 0.97))
-                                        .frame(width: 44, height: 44)
-                                    Image(systemName: "speaker.wave.2.fill")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 20, height: 20)
-                                        .foregroundColor(.white)
-                                }
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Sound")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.black)
-                                    Text("Sound will be on your TV Device")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.gray)
-                                }
-
-                                Spacer()
-
-                                Toggle("", isOn: $sound)
-                                    .labelsHidden()
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                            .padding(.horizontal, 16)
-
-                            // Шаги
-                            VStack(spacing: 12) {
-                                // Step 1
-                                StepCard(number: 1, text: "Tap the \"Start\" button below")
-
-                                // Step 2
-                                StepCard(number: 2, text: "Tap the \"Start Broadcast\" button")
-
-                                // Step 3
-                                StepCard(number: 3, text: "Screen cast will begin in 3 seconds", highlightText: "begin in 3 seconds")
-                            }
-                            .padding(.horizontal, 16)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Описание
+                        Text("Everything on your screen, including notifications, will be recorded")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
                             .padding(.top, 8)
 
-                            Spacer(minLength: 100)
-                        }
-                    }
+                        // Настройки
+                        Text("Settings")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
 
-                    // Кнопка Start Cast
-                    Button(action: {
-                        // Действие для начала трансляции
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "record.circle")
-                                .font(.system(size: 20))
-                            Text("Start Cast")
-                                .font(.system(size: 18, weight: .semibold))
+                        // Auto-Rotate
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(red: 0.22, green: 0.51, blue: 0.97))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "arrow.clockwise")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                                    .foregroundColor(.white)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Auto-Rotate")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.black)
+                                Text("Content on your TV Will be in horizontal orientation")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.gray)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $autoRotate)
+                                .labelsHidden()
                         }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(Color(red: 0.22, green: 0.51, blue: 0.97))
-                        .cornerRadius(28)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .padding(.horizontal, 16)
+
+                        // Sound
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(red: 0.22, green: 0.51, blue: 0.97))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                                    .foregroundColor(.white)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Sound")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.black)
+                                Text("Sound will be on your TV Device")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.gray)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $sound)
+                                .labelsHidden()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .padding(.horizontal, 16)
+
+                        // Шаги
+                        VStack(spacing: 12) {
+                            // Step 1
+                            StepCard(number: 1, text: "Tap the \"Start\" button below")
+
+                            // Step 2
+                            StepCard(number: 2, text: "Tap the \"Start Broadcast\" button")
+
+                            // Step 3
+                            StepCard(number: 3, text: "Screen cast will begin in 3 seconds", highlightText: "begin in 3 seconds")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+
+                        Spacer(minLength: 100)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
                 }
+
+                // Кнопка Start Cast
+                CastButton(isCasting: $isCasting)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
-            .navigationBarHidden(true)
         }
     }
 }

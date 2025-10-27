@@ -3,16 +3,13 @@ import SwiftUI
 struct ConnectDeviceCard: View {
     var body: some View {
         HStack {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 40, height: 40)
-                Image(systemName: "tv")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
-                    .foregroundColor(.white)
-            }
+            // Чистая иконка из ассетов — без фоновых кружков и перекраски
+            Image("ConnectionButton/connect_icon")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: 42, height: 42)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("Connect Device")
                     .font(.system(size: 18, weight: .semibold))
@@ -23,11 +20,15 @@ struct ConnectDeviceCard: View {
             }
             Spacer()
             ZStack {
+                // Круглая подложка теперь с более прозрачным фоном
                 Circle()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 32, height: 32)
-                Image(systemName: "arrow.right")
-                    .foregroundColor(.white)
+                    .stroke(Color.white.opacity(0.4), lineWidth: 2)
+                    .frame(width: 42, height: 42)
+                Image("ConnectionButton/arrow_icon")
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+                    .frame(width: 42, height: 42)
             }
         }
         .padding(16)

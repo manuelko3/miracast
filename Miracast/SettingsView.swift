@@ -55,29 +55,22 @@ struct SettingsRow: View {
     let isAsset: Bool
     var body: some View {
         HStack {
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(gradient: Gradient(colors: [Color(red: 87/255, green: 148/255, blue: 253/255, opacity: 1), Color(red: 28/255, green: 63/255, blue: 189/255, opacity: 1)]), startPoint: .top, endPoint: .bottom))
+            if isAsset {
+                Image(icon)
+                    .resizable()
+                    .scaledToFill()
                     .frame(width: 50, height: 50)
-                    .overlay(
-                        Circle()
-                            .stroke(Color(red: 79/255, green: 135/255, blue: 243/255).opacity(0.2), lineWidth: 2)
-                    )
-                if isAsset {
-                    Image(icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 26)
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                } else {
-                    Image(systemName: icon)
-                        .foregroundColor(.white)
-                        .font(.system(size: 22, weight: .medium))
-                        .frame(width: 44, height: 44)
-                }
+                    .clipShape(Circle())
+                    .padding(.leading, 8)
+            } else {
+                Image(systemName: icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+                    .foregroundColor(.white)
+                    .padding(.leading, 8)
             }
-            .padding(.leading, 8)
             Text(text)
                 .font(.system(size: 18, weight: .medium))
                 .foregroundColor(.black)
