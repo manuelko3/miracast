@@ -1,24 +1,11 @@
 import SwiftUI
 
 struct HomeView: View {
-    @State private var showCastScreen = false
+    @StateObject private var viewModel = HomeViewModel()
+    @EnvironmentObject var appState: AppState
+    // store picked images if needed
+    @State private var pickedImages: [UIImage] = []
 
-    let services: [HomeService] = [
-        .init(icon: "Main/screencast_icon", text: "Screen Cast", isAsset: true),
-        .init(icon: "Main/photos_icon", text: "Photos", isAsset: true),
-        .init(icon: "Main/videos_icon", text: "Videos", isAsset: true),
-        .init(icon: "Main/slideshow_icon", text: "Slide - Show", isAsset: true),
-        .init(icon: "Main/youtube_icon", text: "Youtube", isAsset: true),
-        .init(icon: "Main/tiktok_icon", text: "Tik Tok", isAsset: true),
-        .init(icon: "Main/twitch_icon", text: "Twitch", isAsset: true),
-        .init(icon: "Main/kick_icon", text: "Kick", isAsset: true),
-        .init(icon: "Main/netflix_icon", text: "Netflix", isAsset: true),
-        .init(icon: "Main/word_icon", text: "Documents", isAsset: true),
-        .init(icon: "Main/presentation_icon", text: "Presentations", isAsset: true),
-        .init(icon: "Main/whiteboard_icon", text: "Whiteboard", isAsset: true),
-        .init(icon: "Main/browser_icon", text: "Browser", isAsset: true),
-        .init(icon: "Main/games_icon", text: "Games", isAsset: true)
-    ]
     var body: some View {
         ZStack {
             // Градиентный фон
@@ -38,17 +25,15 @@ struct HomeView: View {
                 // Список сервисов
                 List {
                     Section {
-                        ForEach(services.indices, id: \.self) { idx in
-                            let service = services[idx]
-                            HomeServiceRow(icon: service.icon, iconColor: service.iconColor, text: service.text, isAsset: service.isAsset, showDivider: idx != services.count - 1)
+                        ForEach(viewModel.services.indices, id: \.self) { idx in
+                            let service = viewModel.services[idx]
+                            HomeServiceRow(icon: service.icon, iconColor: service.iconColor, text: service.text, isAsset: service.isAsset, showDivider: idx != viewModel.services.count - 1)
                                 .listRowInsets(EdgeInsets())
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
-                                    if service.text == "Screen Cast" {
-                                        showCastScreen = true
-                                    }
+                                    viewModel.handleServiceTap(service)
                                 }
                         }
                     }
@@ -62,10 +47,34 @@ struct HomeView: View {
                 .padding(.bottom, 16)
             }
         }
-        .sheet(isPresented: $showCastScreen) {
+        .sheet(isPresented: $viewModel.showCastScreen) {
             CastScreenView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        // Photo picker sheet
+        .sheet(isPresented: $viewModel.showPhotoPicker) {
+            PhotoPicker(selectionLimit: 0) { images in
+                // store picked images and dismiss
+                self.pickedImages = images
+                self.appState.selectedPhotos = images
+                self.viewModel.showPhotoPicker = false
+                // show cast photos view after selection
+                self.appState.showCastPhotos = true
+            }
+        }
+        // Alert directing user to Settings when access denied
+        .alert(isPresented: $viewModel.showPhotoSettingsAlert) {
+            Alert(
+                title: Text("Photos Access Needed"),
+                message: Text("Please enable access to photos for this app in your device's privacy settings."),
+                primaryButton: .default(Text("Go to Settings"), action: {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                    }
+                }),
+                secondaryButton: .cancel()
+            )
         }
     }
 }

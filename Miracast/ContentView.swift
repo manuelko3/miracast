@@ -6,25 +6,40 @@
 //
 
 import SwiftUI
+import Combine
+
+class AppState: ObservableObject {
+    @Published var showCastPhotos = false
+    @Published var selectedPhotos: [UIImage] = []
+}
 
 struct ContentView: View {
+    @StateObject private var appState = AppState()
+
     var body: some View {
-        TabView {
-            HomeView()
-                .tabItem {
-                    Image(systemName: "house")
-                    Text("Home")
-                }
-            MusicView()
-                .tabItem {
-                    Image(systemName: "music.note")
-                    Text("Music")
-                }
-            SettingsView()
-                .tabItem {
-                    Image(systemName: "gearshape")
-                    Text("Settings")
-                }
+        if appState.showCastPhotos {
+            CastPhotosView(initialImages: appState.selectedPhotos, onDismiss: {
+                appState.showCastPhotos = false
+            })
+        } else {
+            TabView {
+                HomeView()
+                    .environmentObject(appState)
+                    .tabItem {
+                        Image(systemName: "house")
+                        Text("Home")
+                    }
+                MusicView()
+                    .tabItem {
+                        Image(systemName: "music.note")
+                        Text("Music")
+                    }
+                SettingsView()
+                    .tabItem {
+                        Image(systemName: "gearshape")
+                        Text("Settings")
+                    }
+            }
         }
     }
 }
