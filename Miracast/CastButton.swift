@@ -42,8 +42,6 @@ struct CastButton: View {
             )
             .cornerRadius(28)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 24)
         .buttonStyle(PlainButtonStyle())
     }
 }
@@ -53,6 +51,8 @@ struct CastButton_Previews: PreviewProvider {
     static var previews: some View {
         VStack {
             CastButton(isCasting: $isCasting)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
         }
         .background(Color.gray.opacity(0.1))
     }
