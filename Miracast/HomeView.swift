@@ -5,6 +5,7 @@ struct HomeView: View {
     @EnvironmentObject var appState: AppState
     // store picked images if needed
     @State private var pickedImages: [UIImage] = []
+    @State private var pickedVideoURLs: [URL] = []
 
     var body: some View {
         ZStack {
@@ -63,11 +64,32 @@ struct HomeView: View {
                 self.appState.showCastPhotos = true
             }
         }
-        // Alert directing user to Settings when access denied
+        // Video picker sheet
+        .sheet(isPresented: $viewModel.showVideoPicker) {
+            VideoPicker(selectionLimit: 0) { urls in
+                self.pickedVideoURLs = urls
+                self.appState.selectedVideoURLs = urls
+                self.viewModel.showVideoPicker = false
+                self.appState.showCastVideos = true
+            }
+        }
+        // Alerts
         .alert(isPresented: $viewModel.showPhotoSettingsAlert) {
             Alert(
                 title: Text("Photos Access Needed"),
                 message: Text("Please enable access to photos for this app in your device's privacy settings."),
+                primaryButton: .default(Text("Go to Settings"), action: {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                    }
+                }),
+                secondaryButton: .cancel()
+            )
+        }
+        .alert(isPresented: $viewModel.showVideoSettingsAlert) {
+            Alert(
+                title: Text("Videos Access Needed"),
+                message: Text("Please enable access to videos for this app in your device's privacy settings."),
                 primaryButton: .default(Text("Go to Settings"), action: {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url, options: [:], completionHandler: nil)

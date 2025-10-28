@@ -6,7 +6,10 @@ import Photos
 class HomeViewModel: ObservableObject {
     @Published var showCastScreen = false
     @Published var showCastPhotos = false
+    @Published var showVideoPicker = false
     @Published var selectedPhotos: [UIImage] = []
+    // При выборе видео будем хранить URL-ы во внешнем AppState, но нужен флаг для показа пикера
+    @Published var showCastVideos = false
     @Published var services: [HomeService] = [
         .init(icon: "Main/screencast_icon", text: "Screen Cast", isAsset: true),
         .init(icon: "Main/photos_icon", text: "Photos", isAsset: true),
@@ -26,6 +29,7 @@ class HomeViewModel: ObservableObject {
 
     // For showing a custom alert directing user to Settings when access denied
     @Published var showPhotoSettingsAlert: Bool = false
+    @Published var showVideoSettingsAlert: Bool = false
     // Show the system photo picker when access is available
     @Published var showPhotoPicker: Bool = false
 
@@ -38,11 +42,19 @@ class HomeViewModel: ObservableObject {
             requestPhotoAccess()
             return
         }
+        if service.text == "Videos" {
+            requestVideoAccess()
+            return
+        }
         // Здесь можно добавить обработку других сервисов
     }
 
     func showPhotosAfterSelection() {
         showCastPhotos = true
+    }
+
+    func showVideosAfterSelection() {
+        showCastVideos = true
     }
 
     // Request access to Photo Library. Will show system prompt on .notDetermined.
@@ -73,6 +85,34 @@ class HomeViewModel: ObservableObject {
         case .denied, .restricted:
             // already denied — show alert to open Settings
             showPhotoSettingsAlert = true
+        @unknown default:
+            break
+        }
+    }
+
+    // Request access for videos: reuse the same photo library authorization flow
+    func requestVideoAccess() {
+        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        switch current {
+        case .authorized, .limited:
+            DispatchQueue.main.async {
+                self.showVideoPicker = true
+            }
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
+                DispatchQueue.main.async {
+                    switch status {
+                    case .authorized, .limited:
+                        self?.showVideoPicker = true
+                    case .denied, .restricted:
+                        self?.showVideoSettingsAlert = true
+                    default:
+                        break
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showVideoSettingsAlert = true
         @unknown default:
             break
         }

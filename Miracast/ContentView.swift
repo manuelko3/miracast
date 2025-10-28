@@ -11,6 +11,8 @@ import Combine
 class AppState: ObservableObject {
     @Published var showCastPhotos = false
     @Published var selectedPhotos: [UIImage] = []
+    @Published var showCastVideos = false
+    @Published var selectedVideoURLs: [URL] = []
 }
 
 struct ContentView: View {
@@ -20,6 +22,12 @@ struct ContentView: View {
         if appState.showCastPhotos {
             CastPhotosView(initialImages: appState.selectedPhotos, onDismiss: {
                 appState.showCastPhotos = false
+            })
+        } else if appState.showCastVideos {
+            CastVideosView(initialVideos: appState.selectedVideoURLs, onDismiss: {
+                // очистим ссылки на временные видео и закроем экран
+                appState.selectedVideoURLs = []
+                appState.showCastVideos = false
             })
         } else {
             TabView {
