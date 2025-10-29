@@ -73,6 +73,16 @@ struct HomeView: View {
                 self.appState.showCastVideos = true
             }
         }
+        // Slideshow picker sheet
+        .sheet(isPresented: $viewModel.showSlideshowPicker) {
+            PhotoPicker(selectionLimit: 0) { images in
+                // store picked images and open slideshow
+                self.pickedImages = images
+                self.appState.selectedPhotos = images
+                self.viewModel.showSlideshowPicker = false
+                self.appState.showCastSlideshow = true
+            }
+        }
         // Alerts
         .alert(isPresented: $viewModel.showPhotoSettingsAlert) {
             Alert(

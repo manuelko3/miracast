@@ -13,6 +13,7 @@ class AppState: ObservableObject {
     @Published var selectedPhotos: [UIImage] = []
     @Published var showCastVideos = false
     @Published var selectedVideoURLs: [URL] = []
+    @Published var showCastSlideshow = false
 }
 
 struct ContentView: View {
@@ -28,6 +29,12 @@ struct ContentView: View {
                 // очистим ссылки на временные видео и закроем экран
                 appState.selectedVideoURLs = []
                 appState.showCastVideos = false
+            })
+        } else if appState.showCastSlideshow {
+            CastSlideshowView(initialImages: appState.selectedPhotos, onDismiss: {
+                // clear selected photos and close
+                appState.selectedPhotos = []
+                appState.showCastSlideshow = false
             })
         } else {
             TabView {

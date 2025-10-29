@@ -10,6 +10,9 @@ class HomeViewModel: ObservableObject {
     @Published var selectedPhotos: [UIImage] = []
     // При выборе видео будем хранить URL-ы во внешнем AppState, но нужен флаг для показа пикера
     @Published var showCastVideos = false
+    // Slideshow support
+    @Published var showSlideshowPicker = false
+    @Published var showCastSlideshow = false
     @Published var services: [HomeService] = [
         .init(icon: "Main/screencast_icon", text: "Screen Cast", isAsset: true),
         .init(icon: "Main/photos_icon", text: "Photos", isAsset: true),
@@ -42,6 +45,11 @@ class HomeViewModel: ObservableObject {
             requestPhotoAccess()
             return
         }
+        if service.text == "Slide - Show" {
+            // request access and open picker for slideshow
+            requestPhotoAccessForSlideshow()
+            return
+        }
         if service.text == "Videos" {
             requestVideoAccess()
             return
@@ -55,6 +63,10 @@ class HomeViewModel: ObservableObject {
 
     func showVideosAfterSelection() {
         showCastVideos = true
+    }
+
+    func showSlideshowAfterSelection() {
+        showCastSlideshow = true
     }
 
     // Request access to Photo Library. Will show system prompt on .notDetermined.
@@ -84,6 +96,34 @@ class HomeViewModel: ObservableObject {
             }
         case .denied, .restricted:
             // already denied — show alert to open Settings
+            showPhotoSettingsAlert = true
+        @unknown default:
+            break
+        }
+    }
+
+    // Request access specifically for slideshow flow
+    func requestPhotoAccessForSlideshow() {
+        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        switch current {
+        case .authorized, .limited:
+            DispatchQueue.main.async {
+                self.showSlideshowPicker = true
+            }
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
+                DispatchQueue.main.async {
+                    switch status {
+                    case .authorized, .limited:
+                        self?.showSlideshowPicker = true
+                    case .denied, .restricted:
+                        self?.showPhotoSettingsAlert = true
+                    default:
+                        break
+                    }
+                }
+            }
+        case .denied, .restricted:
             showPhotoSettingsAlert = true
         @unknown default:
             break
