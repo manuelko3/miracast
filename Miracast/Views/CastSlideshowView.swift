@@ -17,6 +17,7 @@ struct CastSlideshowView: View {
     @State private var selectedImages: [UIImage] = []
     @State private var selectedDuration: Double = 30
     @State private var selectedMusicURL: URL? = nil
+    @State private var showShareAlert: Bool = false
     @State private var optionsButtonFrame: CGRect = .zero
 
     var initialImages: [UIImage] = []
@@ -96,6 +97,25 @@ struct CastSlideshowView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 12)
 
+                // Progress bar under navigation when rendering
+                if isRendering {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 4)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.blue)
+                                .frame(width: max(0, geo.size.width) * CGFloat(renderProgress), height: 4)
+                                .animation(.easeInOut(duration: 0.2), value: renderProgress)
+                        }
+                        .frame(height: 4)
+                    }
+                    .frame(height: 4)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
+
                 Spacer()
 
                 // Player or rendering indicator
@@ -115,9 +135,7 @@ struct CastSlideshowView: View {
                 } else {
                     VStack(spacing: 12) {
                         if isRendering {
-                            ProgressView(value: renderProgress)
-                                .progressViewStyle(LinearProgressViewStyle())
-                                .padding(.horizontal, 24)
+                            // keep only textual progress here; thin bar under nav shows visual progress
                             Text("Rendering slideshow... \(Int(renderProgress * 100))%")
                                 .foregroundColor(.gray)
                         } else {
@@ -167,6 +185,22 @@ struct CastSlideshowView: View {
                 showMusicPicker = false
                 needsRerender()
             })
+        }
+        .alert("Video not ready", isPresented: $showShareAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Please wait for the slideshow video to finish rendering before sharing.")
+        }
+        .onAppear {
+            // initialize images and start rendering when view appears
+            if selectedImages.isEmpty {
+                selectedImages = initialImages
+            }
+            startRenderingIfNeeded()
+        }
+        .onChange(of: selectedImages) { old, new in
+            // react to changes in selectedImages (old -> new)
+            startRenderingIfNeeded()
         }
         .onDisappear {
             cleanupTempFiles()
@@ -317,10 +351,19 @@ struct CastSlideshowView: View {
     }
 
     private func shareVideo() {
-        guard let url = outputURL else { return }
+        guard let url = outputURL else {
+            showShareAlert = true
+            return
+        }
         let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootVC = windowScene.windows.first?.rootViewController {
+            // Для iPad - настройка popover
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = rootVC.view
+                popover.sourceRect = CGRect(x: rootVC.view.bounds.midX, y: rootVC.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
             rootVC.present(activityVC, animated: true)
         }
     }
