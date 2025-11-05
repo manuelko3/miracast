@@ -14,6 +14,7 @@ class AppState: ObservableObject {
     @Published var showCastVideos = false
     @Published var selectedVideoURLs: [URL] = []
     @Published var showCastSlideshow = false
+    @Published var showWordDocumentScreen = false // новое состояние
 }
 
 struct ContentView: View {
@@ -36,6 +37,8 @@ struct ContentView: View {
                 appState.selectedPhotos = []
                 appState.showCastSlideshow = false
             })
+        } else if appState.showWordDocumentScreen {
+            WordDocumentScreen(isPresented: $appState.showWordDocumentScreen)
         } else {
             TabView {
                 HomeView()

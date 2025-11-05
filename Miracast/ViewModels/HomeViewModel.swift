@@ -40,6 +40,9 @@ class HomeViewModel: ObservableObject {
     @Published var showWebService = false
     @Published var webServiceURL: URL? = nil
     @Published var webServiceTitle: String = ""
+    @Published var showDocumentPicker = false
+    @Published var showCastDocument = false
+    @Published var selectedDocumentURL: URL? = nil
 
     func handleServiceTap(_ service: HomeService) {
         if service.text == "Screen Cast" {
@@ -87,6 +90,10 @@ class HomeViewModel: ObservableObject {
             webServiceURL = URL(string: "https://www.netflix.com")
             webServiceTitle = "Cast Netflix"
             showWebService = true
+            return
+        }
+        if service.text == "Documents" {
+            requestDocumentAccess()
             return
         }
         // Здесь можно добавить обработку других сервисов
@@ -191,5 +198,18 @@ class HomeViewModel: ObservableObject {
         @unknown default:
             break
         }
+    }
+
+    // Запрос доступа к файлам через document picker
+    func requestDocumentAccess() {
+        // Просто показываем document picker, т.к. доступ запрашивается системой
+        DispatchQueue.main.async {
+            self.showDocumentPicker = true
+        }
+    }
+
+    func showDocumentAfterSelection(url: URL) {
+        selectedDocumentURL = url
+        showCastDocument = true
     }
 }

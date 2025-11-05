@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+    var onWordTap: () -> Void = {}
     @StateObject private var viewModel = HomeViewModel()
     @EnvironmentObject var appState: AppState
     // store picked images if needed
@@ -26,6 +27,7 @@ struct HomeView: View {
                 // Список сервисов
                 List {
                     Section {
+                        // Удалена отдельная кнопка Word
                         ForEach(viewModel.services.indices, id: \.self) { idx in
                             let service = viewModel.services[idx]
                             HomeServiceRow(icon: service.icon, iconColor: service.iconColor, text: service.text, isAsset: service.isAsset, showDivider: idx != viewModel.services.count - 1)
@@ -34,7 +36,11 @@ struct HomeView: View {
                                 .listRowSeparator(.hidden)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
-                                    viewModel.handleServiceTap(service)
+                                    if service.text == "Documents" {
+                                        appState.showWordDocumentScreen = true
+                                    } else {
+                                        viewModel.handleServiceTap(service)
+                                    }
                                 }
                         }
                     }
