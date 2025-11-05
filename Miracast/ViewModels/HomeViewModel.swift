@@ -13,6 +13,8 @@ class HomeViewModel: ObservableObject {
     // Slideshow support
     @Published var showSlideshowPicker = false
     @Published var showCastSlideshow = false
+    // YouTube support
+    @Published var showCastYouTube = false
     @Published var services: [HomeService] = [
         .init(icon: "Main/screencast_icon", text: "Screen Cast", isAsset: true),
         .init(icon: "Main/photos_icon", text: "Photos", isAsset: true),
@@ -35,6 +37,9 @@ class HomeViewModel: ObservableObject {
     @Published var showVideoSettingsAlert: Bool = false
     // Show the system photo picker when access is available
     @Published var showPhotoPicker: Bool = false
+    @Published var showWebService = false
+    @Published var webServiceURL: URL? = nil
+    @Published var webServiceTitle: String = ""
 
     func handleServiceTap(_ service: HomeService) {
         if service.text == "Screen Cast" {
@@ -52,6 +57,36 @@ class HomeViewModel: ObservableObject {
         }
         if service.text == "Videos" {
             requestVideoAccess()
+            return
+        }
+        if service.text == "Youtube" {
+            webServiceURL = URL(string: "https://www.youtube.com")
+            webServiceTitle = "Cast YouTube"
+            showWebService = true
+            return
+        }
+        if service.text == "Tik Tok" {
+            webServiceURL = URL(string: "https://www.tiktok.com")
+            webServiceTitle = "Cast TikTok"
+            showWebService = true
+            return
+        }
+        if service.text == "Twitch" {
+            webServiceURL = URL(string: "https://www.twitch.tv")
+            webServiceTitle = "Cast Twitch"
+            showWebService = true
+            return
+        }
+        if service.text == "Kick" {
+            webServiceURL = URL(string: "https://www.kick.com")
+            webServiceTitle = "Cast Kick"
+            showWebService = true
+            return
+        }
+        if service.text == "Netflix" {
+            webServiceURL = URL(string: "https://www.netflix.com")
+            webServiceTitle = "Cast Netflix"
+            showWebService = true
             return
         }
         // Здесь можно добавить обработку других сервисов

@@ -83,6 +83,14 @@ struct HomeView: View {
                 self.appState.showCastSlideshow = true
             }
         }
+        // Универсальный веб-экран для всех сервисов
+        .fullScreenCover(isPresented: $viewModel.showWebService) {
+            if let url = viewModel.webServiceURL {
+                CastWebServiceView(url: url, title: viewModel.webServiceTitle)
+            } else {
+                Text("Ошибка: ссылка не найдена")
+            }
+        }
         // Alerts
         .alert(isPresented: $viewModel.showPhotoSettingsAlert) {
             Alert(
