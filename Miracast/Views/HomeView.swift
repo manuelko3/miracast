@@ -7,6 +7,7 @@ struct HomeView: View {
     // store picked images if needed
     @State private var pickedImages: [UIImage] = []
     @State private var pickedVideoURLs: [URL] = []
+    @State private var showPresentationScreen: Bool = false
 
     var body: some View {
         ZStack {
@@ -38,6 +39,8 @@ struct HomeView: View {
                                 .onTapGesture {
                                     if service.text == "Documents" {
                                         appState.showWordDocumentScreen = true
+                                    } else if service.text == "Presentations" {
+                                        showPresentationScreen = true
                                     } else {
                                         viewModel.handleServiceTap(service)
                                     }
@@ -121,6 +124,9 @@ struct HomeView: View {
                 }),
                 secondaryButton: .cancel()
             )
+        }
+        .fullScreenCover(isPresented: $showPresentationScreen) {
+            PresentationScreen(isPresented: $showPresentationScreen)
         }
     }
 }
