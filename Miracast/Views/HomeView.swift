@@ -41,6 +41,8 @@ struct HomeView: View {
                                         appState.showWordDocumentScreen = true
                                     } else if service.text == "Presentations" {
                                         showPresentationScreen = true
+                                    } else if service.text == "Whiteboard" {
+                                        appState.showWhiteboard = true
                                     } else {
                                         viewModel.handleServiceTap(service)
                                     }

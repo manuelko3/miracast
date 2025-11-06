@@ -96,6 +96,10 @@ class HomeViewModel: ObservableObject {
             requestDocumentAccess()
             return
         }
+        if service.text == "Whiteboard" {
+            // Переход к whiteboard экрану через AppState будет обрабатываться в HomeView
+            return
+        }
         // Здесь можно добавить обработку других сервисов
     }
 

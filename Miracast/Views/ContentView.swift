@@ -15,6 +15,7 @@ class AppState: ObservableObject {
     @Published var selectedVideoURLs: [URL] = []
     @Published var showCastSlideshow = false
     @Published var showWordDocumentScreen = false // новое состояние
+    @Published var showWhiteboard = false // состояние для whiteboard
 }
 
 struct ContentView: View {
@@ -39,6 +40,8 @@ struct ContentView: View {
             })
         } else if appState.showWordDocumentScreen {
             WordDocumentScreen(isPresented: $appState.showWordDocumentScreen)
+        } else if appState.showWhiteboard {
+            WhiteboardMainView(isPresented: $appState.showWhiteboard)
         } else {
             TabView {
                 HomeView()
