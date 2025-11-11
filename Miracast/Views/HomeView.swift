@@ -127,8 +127,21 @@ struct HomeView: View {
                 secondaryButton: .cancel()
             )
         }
+        .alert(isPresented: $viewModel.showGamesPermissionAlert) {
+            Alert(
+                title: Text("\"App Name\" Would Like to Scan your apps library"),
+                message: Text("The app have to detect gaming apps installed to your device"),
+                primaryButton: .default(Text("I understand"), action: {
+                    viewModel.handleGamesPermissionConfirm()
+                }),
+                secondaryButton: .cancel(Text("Cancel"))
+            )
+        }
         .fullScreenCover(isPresented: $showPresentationScreen) {
             PresentationScreen(isPresented: $showPresentationScreen)
+        }
+        .fullScreenCover(isPresented: $viewModel.showGamesScreen) {
+            GamesView(isPresented: $viewModel.showGamesScreen)
         }
     }
 }

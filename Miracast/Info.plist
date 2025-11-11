@@ -36,5 +36,38 @@
     <string>Приложению нужен доступ к вашим фото, чтобы вы могли выбрать изображения для трансляции или сохранения.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Приложению нужен доступ для сохранения снимков и записей в вашу библиотеку фотографий.</string>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>amongus</string>
+        <string>pubgmobile</string>
+        <string>codm</string>
+        <string>fortnite</string>
+        <string>robloxmobile</string>
+        <string>minecraft</string>
+        <string>brawlstars</string>
+        <string>clashofclans</string>
+        <string>clashroyale</string>
+        <string>candycrush</string>
+        <string>subwaysurfers</string>
+        <string>asphalt9</string>
+        <string>mobilelegends</string>
+        <string>genshinimpact</string>
+        <string>lolwr</string>
+        <string>freefire</string>
+        <string>eightballpool</string>
+        <string>templerun</string>
+        <string>angrybirds</string>
+        <string>pokemongo</string>
+        <string>stumbleguys</string>
+        <string>hillclimbracing</string>
+        <string>fruitninja</string>
+        <string>pvz</string>
+        <string>geometrydash</string>
+        <string>dragoncity</string>
+        <string>township</string>
+        <string>homescapes</string>
+        <string>gardenscapes</string>
+        <string>shadowfight</string>
+    </array>
 </dict>
 </plist>

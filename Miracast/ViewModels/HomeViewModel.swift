@@ -43,6 +43,8 @@ class HomeViewModel: ObservableObject {
     @Published var showDocumentPicker = false
     @Published var showCastDocument = false
     @Published var selectedDocumentURL: URL? = nil
+    @Published var showGamesPermissionAlert = false
+    @Published var showGamesScreen = false
 
     func handleServiceTap(_ service: HomeService) {
         if service.text == "Screen Cast" {
@@ -98,6 +100,10 @@ class HomeViewModel: ObservableObject {
         }
         if service.text == "Whiteboard" {
             // Переход к whiteboard экрану через AppState будет обрабатываться в HomeView
+            return
+        }
+        if service.text == "Games" {
+            showGamesPermissionAlert = true
             return
         }
         // Здесь можно добавить обработку других сервисов
@@ -215,5 +221,10 @@ class HomeViewModel: ObservableObject {
     func showDocumentAfterSelection(url: URL) {
         selectedDocumentURL = url
         showCastDocument = true
+    }
+
+    func handleGamesPermissionConfirm() {
+        showGamesPermissionAlert = false
+        showGamesScreen = true
     }
 }
