@@ -45,6 +45,7 @@ class HomeViewModel: ObservableObject {
     @Published var selectedDocumentURL: URL? = nil
     @Published var showGamesPermissionAlert = false
     @Published var showGamesScreen = false
+    @Published var showBrowser = false
 
     func handleServiceTap(_ service: HomeService) {
         if service.text == "Screen Cast" {
@@ -104,6 +105,10 @@ class HomeViewModel: ObservableObject {
         }
         if service.text == "Games" {
             showGamesPermissionAlert = true
+            return
+        }
+        if service.text == "Browser" {
+            showBrowser = true
             return
         }
         // Здесь можно добавить обработку других сервисов

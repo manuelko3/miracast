@@ -143,6 +143,9 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $viewModel.showGamesScreen) {
             GamesView(isPresented: $viewModel.showGamesScreen)
         }
+        .fullScreenCover(isPresented: $viewModel.showBrowser) {
+            BrowserView()
+        }
     }
 }
 
