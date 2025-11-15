@@ -5,6 +5,7 @@ struct MusicView: View {
     @State private var showAppleMusicAlert = false
     @State private var showSettingsAlert = false
     @State private var appleMusicAuthStatus: MPMediaLibraryAuthorizationStatus = MPMediaLibrary.authorizationStatus()
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         ZStack {
@@ -34,9 +35,15 @@ struct MusicView: View {
                 .padding(.top, 16)
                 .padding(.horizontal, 16)
                 // Синяя карточка
-                ConnectDeviceCard()
-                    .padding(.top, 20)
-                    .padding(.horizontal, 16)
+                ConnectDeviceCard(
+                    onTap: {
+                        appState.showDeviceDiscovery = true
+                    },
+                    isConnected: $appState.isDeviceConnected,
+                    connectedDeviceName: $appState.connectedDeviceName
+                )
+                .padding(.top, 20)
+                .padding(.horizontal, 16)
                 // Список сервисов
                 VStack(spacing: 0) {
                     MusicServiceRow(iconAssetName: "Music/apple_icon", text: "Apple Music") {
@@ -75,6 +82,11 @@ struct MusicView: View {
                 }),
                 secondaryButton: .cancel()
             )
+        }
+        // Device Discovery screen
+        .sheet(isPresented: $appState.showDeviceDiscovery) {
+            DeviceDiscoveryView(isPresented: $appState.showDeviceDiscovery)
+                .environmentObject(appState)
         }
     }
 
@@ -139,5 +151,6 @@ struct MusicServiceRow: View {
 struct MusicView_Previews: PreviewProvider {
     static var previews: some View {
         MusicView()
+            .environmentObject(AppState())
     }
 }

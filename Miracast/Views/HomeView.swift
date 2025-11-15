@@ -22,9 +22,15 @@ struct HomeView: View {
                     .padding(.top, 16)
                     .padding(.horizontal, 16)
                 // Синяя карточка
-                ConnectDeviceCard()
-                    .padding(.top, 20)
-                    .padding(.horizontal, 16)
+                ConnectDeviceCard(
+                    onTap: {
+                        appState.showDeviceDiscovery = true
+                    },
+                    isConnected: $appState.isDeviceConnected,
+                    connectedDeviceName: $appState.connectedDeviceName
+                )
+                .padding(.top, 20)
+                .padding(.horizontal, 16)
                 // Список сервисов
                 List {
                     Section {
@@ -70,9 +76,13 @@ struct HomeView: View {
                 // store picked images and dismiss
                 self.pickedImages = images
                 self.appState.selectedPhotos = images
-                self.viewModel.showPhotoPicker = false
-                // show cast photos view after selection
+                // Сначала отметим, что нужно показать экран CastPhotos,
+                // затем закроем picker в следующем тике runloop — это предотвращает
+                // мерцание предыдущего экрана при анимации закрытия sheet и открытия нового.
                 self.appState.showCastPhotos = true
+                DispatchQueue.main.async {
+                    self.viewModel.showPhotoPicker = false
+                }
             }
         }
         // Video picker sheet
@@ -80,8 +90,10 @@ struct HomeView: View {
             VideoPicker(selectionLimit: 0) { urls in
                 self.pickedVideoURLs = urls
                 self.appState.selectedVideoURLs = urls
-                self.viewModel.showVideoPicker = false
                 self.appState.showCastVideos = true
+                DispatchQueue.main.async {
+                    self.viewModel.showVideoPicker = false
+                }
             }
         }
         // Slideshow picker sheet
@@ -90,8 +102,10 @@ struct HomeView: View {
                 // store picked images and open slideshow
                 self.pickedImages = images
                 self.appState.selectedPhotos = images
-                self.viewModel.showSlideshowPicker = false
                 self.appState.showCastSlideshow = true
+                DispatchQueue.main.async {
+                    self.viewModel.showSlideshowPicker = false
+                }
             }
         }
         // Универсальный веб-экран для всех сервисов
@@ -145,6 +159,11 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $viewModel.showBrowser) {
             BrowserView()
+        }
+        // Device Discovery screen
+        .sheet(isPresented: $appState.showDeviceDiscovery) {
+            DeviceDiscoveryView(isPresented: $appState.showDeviceDiscovery)
+                .environmentObject(appState)
         }
     }
 }

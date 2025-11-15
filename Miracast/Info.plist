@@ -36,6 +36,14 @@
     <string>Приложению нужен доступ к вашим фото, чтобы вы могли выбрать изображения для трансляции или сохранения.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Приложению нужен доступ для сохранения снимков и записей в вашу библиотеку фотографий.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Приложению нужен доступ к локальной сети для поиска и подключения к телевизорам и другим устройствам для трансляции.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_googlecast._tcp</string>
+        <string>_airplay._tcp</string>
+        <string>_raop._tcp</string>
+    </array>
     <key>LSApplicationQueriesSchemes</key>
     <array>
         <string>amongus</string>

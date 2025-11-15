@@ -28,7 +28,9 @@ struct PhotoPicker: UIViewControllerRepresentable {
         init(_ parent: PhotoPicker) { self.parent = parent }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true, completion: nil)
+            // Let SwiftUI manage dismissal of the sheet via the binding in the presenting view.
+            // Avoid direct dismissal animation to prevent showing the previous screen while
+            // the app transitions to the new full-screen view.
             guard !results.isEmpty else {
                 parent.didFinishPicking([])
                 return

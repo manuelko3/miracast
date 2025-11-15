@@ -16,51 +16,59 @@ class AppState: ObservableObject {
     @Published var showCastSlideshow = false
     @Published var showWordDocumentScreen = false // новое состояние
     @Published var showWhiteboard = false // состояние для whiteboard
+    @Published var showDeviceDiscovery = false // состояние для поиска устройств
+    @Published var isDeviceConnected = false // статус подключения
+    @Published var connectedDeviceName = "" // имя подключенного устройства
 }
 
 struct ContentView: View {
     @StateObject private var appState = AppState()
 
     var body: some View {
-        if appState.showCastPhotos {
+        TabView {
+            HomeView()
+                .environmentObject(appState)
+                .tabItem {
+                    Image(systemName: "house")
+                    Text("Home")
+                }
+            MusicView()
+                .environmentObject(appState)
+                .tabItem {
+                    Image(systemName: "music.note")
+                    Text("Music")
+                }
+            SettingsView()
+                .environmentObject(appState)
+                .tabItem {
+                    Image(systemName: "gearshape")
+                    Text("Settings")
+                }
+        }
+        // Present cast/photo/video/slideshow screens as full screen covers over the TabView
+        .fullScreenCover(isPresented: $appState.showCastPhotos) {
             CastPhotosView(initialImages: appState.selectedPhotos, onDismiss: {
                 appState.showCastPhotos = false
+                // optionally clear selectedPhotos here if desired
             })
-        } else if appState.showCastVideos {
+        }
+        .fullScreenCover(isPresented: $appState.showCastVideos) {
             CastVideosView(initialVideos: appState.selectedVideoURLs, onDismiss: {
-                // очистим ссылки на временные видео и закроем экран
                 appState.selectedVideoURLs = []
                 appState.showCastVideos = false
             })
-        } else if appState.showCastSlideshow {
+        }
+        .fullScreenCover(isPresented: $appState.showCastSlideshow) {
             CastSlideshowView(initialImages: appState.selectedPhotos, onDismiss: {
-                // clear selected photos and close
                 appState.selectedPhotos = []
                 appState.showCastSlideshow = false
             })
-        } else if appState.showWordDocumentScreen {
+        }
+        .fullScreenCover(isPresented: $appState.showWordDocumentScreen) {
             WordDocumentScreen(isPresented: $appState.showWordDocumentScreen)
-        } else if appState.showWhiteboard {
+        }
+        .fullScreenCover(isPresented: $appState.showWhiteboard) {
             WhiteboardMainView(isPresented: $appState.showWhiteboard)
-        } else {
-            TabView {
-                HomeView()
-                    .environmentObject(appState)
-                    .tabItem {
-                        Image(systemName: "house")
-                        Text("Home")
-                    }
-                MusicView()
-                    .tabItem {
-                        Image(systemName: "music.note")
-                        Text("Music")
-                    }
-                SettingsView()
-                    .tabItem {
-                        Image(systemName: "gearshape")
-                        Text("Settings")
-                    }
-            }
         }
     }
 }
