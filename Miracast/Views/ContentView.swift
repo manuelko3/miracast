@@ -19,6 +19,27 @@ class AppState: ObservableObject {
     @Published var showDeviceDiscovery = false // состояние для поиска устройств
     @Published var isDeviceConnected = false // статус подключения
     @Published var connectedDeviceName = "" // имя подключенного устройства
+    @Published var selectedDevice: CastDevice? // выбранное устройство для подключения
+    @Published var showPinVerification = false // показать экран ввода PIN
+    @Published var pairingInProgress = false // идет процесс сопряжения
+    
+    private var airPlayManager = AirPlayConnectionManager.shared
+    private var cancellables = Set<AnyCancellable>()
+    
+    init() {
+        // Подписываемся на изменения AirPlay статуса
+        airPlayManager.$isConnected
+            .sink { [weak self] isConnected in
+                self?.isDeviceConnected = isConnected
+            }
+            .store(in: &cancellables)
+        
+        airPlayManager.$connectedDeviceName
+            .sink { [weak self] deviceName in
+                self?.connectedDeviceName = deviceName
+            }
+            .store(in: &cancellables)
+    }
 }
 
 struct ContentView: View {

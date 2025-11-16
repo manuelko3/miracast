@@ -1,6 +1,7 @@
 import SwiftUI
 import Network
 import Combine
+import SmartView
 
 class DeviceDiscoveryViewModel: ObservableObject {
     @Published var discoveredDevices: [CastDevice] = []
@@ -11,14 +12,59 @@ class DeviceDiscoveryViewModel: ObservableObject {
     @Published var showPermissionAlert: Bool = false
     @Published var showNetworkPermissionAlert: Bool = false
 
+    @Published var requiresPinVerification: Bool = false
+    @Published var deviceRequiringPin: CastDevice?
+
     private var searchTimer: Timer?
     private var browsers: [NWBrowser] = []
     private var ssdpListener: NWListener?
     private var ssdpConnection: NWConnection?
     private var scanningQueue = DispatchQueue(label: "com.miracast.ipscanner", qos: .userInitiated, attributes: .concurrent)
+    private var airPlayManager = AirPlayConnectionManager.shared
+    private var samsungManager = SamsungSmartViewManager.shared
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
-        // Инициализация
+        // Подписываемся на изменения состояния AirPlay подключения
+        airPlayManager.$isConnected
+            .sink { [weak self] isConnected in
+                self?.isConnected = isConnected
+            }
+            .store(in: &cancellables)
+
+        // Подписываемся на изменения состояния Samsung TV подключения
+        samsungManager.$isConnected
+            .sink { [weak self] isConnected in
+                if isConnected {
+                    self?.isConnected = true
+                }
+            }
+            .store(in: &cancellables)
+
+        // Подписываемся на устройства Samsung TV
+        samsungManager.$discoveredDevices
+            .sink { [weak self] samsungDevices in
+                guard let self = self else { return }
+
+                // Добавляем Samsung устройства в общий список
+                for samsungService in samsungDevices {
+                    let device = CastDevice(
+                        id: samsungService.id,
+                        name: samsungService.displayName,
+                        modelName: "Samsung Smart TV",
+                        ipAddress: samsungService.ipAddress ?? "Unknown",
+                        deviceType: .samsungTV,
+                        isConnected: false,
+                        signalStrength: 100
+                    )
+
+                    // Добавляем только если его еще нет
+                    if !self.discoveredDevices.contains(where: { $0.id == device.id }) {
+                        self.discoveredDevices.append(device)
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // Запрос разрешения на доступ к локальной сети
@@ -115,6 +161,10 @@ class DeviceDiscoveryViewModel: ObservableObject {
 
         // НОВОЕ: Сканируем локальную подсеть напрямую (работает даже между 2.4 и 5 GHz)
         startDirectIPScan()
+
+        // РЕАЛЬНОЕ подключение: Запускаем поиск через Samsung Smart View SDK
+        print("📺 Starting Samsung Smart View SDK discovery...")
+        samsungManager.startDiscovery()
 
         // Останавливаем поиск через 30 секунд (даем время для полного IP сканирования)
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
@@ -266,8 +316,8 @@ class DeviceDiscoveryViewModel: ObservableObject {
                             name: self.cleanDeviceName(name),
                             modelName: modelName,
                             ipAddress: "Discovering...",
-                            signalStrength: Int.random(in: 70...100),
-                            deviceType: detectedDeviceType
+                            deviceType: detectedDeviceType,
+                            signalStrength: Int.random(in: 70...100)
                         )
 
                         // Добавляем только уникальные устройства
@@ -523,8 +573,8 @@ class DeviceDiscoveryViewModel: ObservableObject {
                     name: deviceName ?? "Unknown Device",
                     modelName: modelName,
                     ipAddress: ip,
-                    signalStrength: Int.random(in: 70...100),
-                    deviceType: deviceType
+                    deviceType: deviceType,
+                    signalStrength: Int.random(in: 70...100)
                 )
 
                 // Добавляем только уникальные устройства
@@ -614,7 +664,7 @@ class DeviceDiscoveryViewModel: ObservableObject {
                     self.probeTVPort(ip: ip, port: 8002)  // Samsung Smart View SSL
                     self.probeTVPort(ip: ip, port: 55000) // Samsung Remote
                     self.probeTVPort(ip: ip, port: 9197)  // Samsung AirPlay
-                    
+
                     // Общие TV порты
                     self.probeTVPort(ip: ip, port: 8080)  // HTTP альтернативный
                     self.probeTVPort(ip: ip, port: 7000)  // AirPlay
@@ -732,7 +782,7 @@ class DeviceDiscoveryViewModel: ObservableObject {
             modelName = "Samsung Smart TV (Remote)"
             deviceType = .tv
             print("🎯 Identified Samsung Remote Control at \(ip):\(port)")
-            
+
         case 9197:
             deviceName = "Samsung TV"
             modelName = "Samsung Smart TV (AirPlay)"
@@ -744,7 +794,7 @@ class DeviceDiscoveryViewModel: ObservableObject {
             modelName = "LG WebOS TV"
             deviceType = .tv
             print("🎯 Identified LG WebOS TV at \(ip):\(port)")
-            
+
         case 7000:
             deviceName = "Smart TV"
             modelName = "AirPlay Device"
@@ -766,8 +816,8 @@ class DeviceDiscoveryViewModel: ObservableObject {
             name: "\(deviceName) (\(ip))",
             modelName: modelName,
             ipAddress: ip,
-            signalStrength: Int.random(in: 70...100),
-            deviceType: deviceType
+            deviceType: deviceType,
+            signalStrength: Int.random(in: 70...100)
         )
 
         // Проверяем что такого устройства еще нет
@@ -794,6 +844,9 @@ class DeviceDiscoveryViewModel: ObservableObject {
         ssdpListener?.cancel()
         ssdpListener = nil
 
+        // Останавливаем Samsung Smart View поиск
+        samsungManager.stopDiscovery()
+
         print("🛑 Discovery stopped. Found \(discoveredDevices.count) device(s)")
 
         if discoveredDevices.isEmpty {
@@ -810,15 +863,85 @@ class DeviceDiscoveryViewModel: ObservableObject {
         selectedDevice = device
         isSearching = true
 
-        // Симуляция подключения
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            // Обновляем устройство как подключенное
-            if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
-                self.discoveredDevices[index].isConnected = true
+        // Проверяем, требуется ли PIN для Samsung TV
+        if device.modelName.contains("Samsung") {
+            // Samsung TV требует PIN-код для сопряжения
+            print("🔐 Samsung TV detected - PIN verification required")
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.isSearching = false
+                self.requiresPinVerification = true
+                self.deviceRequiringPin = device
             }
-            self.isConnected = true
-            self.isSearching = false
+        } else {
+            // Для других устройств - показываем системный AirPlay пикер
+            print("📺 Opening system AirPlay picker for device: \(device.name)")
+            DispatchQueue.main.async {
+                self.isSearching = false
+                // Здесь нужно показать системный AirPlay picker
+                // Это будет сделано через View
+                NotificationCenter.default.post(name: NSNotification.Name("ShowAirPlayPicker"), object: nil)
+            }
         }
+    }
+
+    private func connectWithoutPin(_ device: CastDevice) {
+        // Эта функция больше не используется - подключение идет через системный AirPlay
+        print("ℹ️ Use system AirPlay picker for connection")
+    }
+
+    // Подключение с PIN-кодом для Samsung TV
+    func connectWithPin(_ device: CastDevice, pin: String) {
+        print("🔐 Attempting to connect to \(device.name) (\(device.ipAddress)) with PIN: \(pin)")
+        isSearching = true
+
+        // Ищем соответствующий Samsung Service
+        guard let samsungService = samsungManager.discoveredDevices.first(where: {
+            $0.id == device.id || $0.displayName == device.name
+        }) else {
+            print("❌ Samsung service not found for device: \(device.name)")
+
+            // Fallback: показываем системный AirPlay picker
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.isSearching = false
+                self.connectionError = "Samsung service not found. Try using AirPlay instead."
+                NotificationCenter.default.post(name: NSNotification.Name("ShowAirPlayPicker"), object: nil)
+            }
+            return
+        }
+
+        // РЕАЛЬНОЕ подключение через Samsung Smart View SDK
+        samsungManager.connect(to: samsungService, appName: "Miracast App") { [weak self] success, error in
+            guard let self = self else { return }
+
+            DispatchQueue.main.async {
+                self.isSearching = false
+
+                if success {
+                    // Успешное подключение
+                    if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
+                        self.discoveredDevices[index].isConnected = true
+                    }
+                    self.isConnected = true
+                    self.requiresPinVerification = false
+                    self.deviceRequiringPin = nil
+
+                    print("✅ Successfully connected to Samsung TV: \(device.name)")
+                } else {
+                    // Ошибка подключения
+                    self.connectionError = error ?? "Failed to connect to Samsung TV"
+                    print("❌ Connection failed: \(error ?? "Unknown error")")
+
+                    // Показываем AirPlay как альтернативу
+                    NotificationCenter.default.post(name: NSNotification.Name("ShowAirPlayPicker"), object: nil)
+                }
+            }
+        }
+    }
+
+    private func connectToSamsungTV(device: CastDevice, pin: String) {
+        // Этот метод больше не используется - подключение идет через SamsungSmartViewManager
+        print("ℹ️ Using Samsung Smart View SDK for connection")
     }
 
     func disconnect() {
@@ -826,6 +949,12 @@ class DeviceDiscoveryViewModel: ObservableObject {
            let index = discoveredDevices.firstIndex(where: { $0.id == device.id }) {
             discoveredDevices[index].isConnected = false
         }
+
+        // Отключаемся от Samsung TV если подключены
+        if samsungManager.isConnected {
+            samsungManager.disconnect()
+        }
+
         selectedDevice = nil
         isConnected = false
     }

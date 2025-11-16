@@ -1,0 +1,15 @@
+// Настройки сборки для исправления проблемы с BCSymbolMaps
+
+// Отключаем stripping Swift символов (исправляет ошибку Sandbox)
+STRIP_SWIFT_SYMBOLS = NO
+
+// Не копируем BCSymbolMaps
+STRIP_BITCODE_FROM_COPIED_FILES = NO
+
+// Для Debug - не удаляем символы отладки
+COPY_PHASE_STRIP[config=Debug] = NO
+STRIP_INSTALLED_PRODUCT[config=Debug] = NO
+
+// Для Release - можно включить оптимизации
+COPY_PHASE_STRIP[config=Release] = NO
+STRIP_INSTALLED_PRODUCT[config=Release] = NO
