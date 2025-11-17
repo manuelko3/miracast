@@ -17,8 +17,12 @@ class DeviceDiscoveryViewModel: ObservableObject {
     private var ssdpConnection: NWConnection?
     private var scanningQueue = DispatchQueue(label: "com.miracast.ipscanner", qos: .userInitiated, attributes: .concurrent)
 
+    // SmartView SDK Manager для Samsung устройств
+    private var smartViewManager: SmartViewManager?
+
     init() {
-        // Инициализация
+        // Инициализация SmartView SDK
+        smartViewManager = SmartViewManager()
     }
 
     // Запрос разрешения на доступ к локальной сети
@@ -107,6 +111,9 @@ class DeviceDiscoveryViewModel: ObservableObject {
         print("   - System: \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+        // 🆕 НОВОЕ: Запускаем SmartView SDK поиск для Samsung TV (самый надежный метод!)
+        startSmartViewDiscovery()
+
         // Запускаем поиск по нескольким протоколам одновременно
         startMultiProtocolDiscovery()
 
@@ -119,6 +126,42 @@ class DeviceDiscoveryViewModel: ObservableObject {
         // Останавливаем поиск через 30 секунд (даем время для полного IP сканирования)
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
             self.stopDiscovery()
+        }
+    }
+
+    // 🆕 Поиск Samsung устройств через SmartView SDK
+    private func startSmartViewDiscovery() {
+        print("🔍 Starting SmartView SDK discovery for Samsung devices...")
+
+        smartViewManager?.startDiscovery { [weak self] services in
+            guard let self = self else { return }
+
+            DispatchQueue.main.async {
+                for service in services {
+                    // Создаем CastDevice из Service
+                    let deviceName = service.name
+
+                    // Получаем IP адрес из URI строки
+                    var ipAddress = "Unknown"
+                    if let url = URL(string: service.uri) {
+                        ipAddress = url.host ?? "Unknown"
+                    }
+
+                    let device = CastDevice(
+                        name: deviceName,
+                        modelName: "Samsung Smart TV (SmartView SDK)",
+                        ipAddress: ipAddress,
+                        signalStrength: Int.random(in: 80...100),
+                        deviceType: .tv
+                    )
+
+                    // Добавляем только уникальные устройства
+                    if !self.discoveredDevices.contains(where: { $0.name == device.name }) {
+                        self.discoveredDevices.append(device)
+                        print("✅ Added Samsung device via SmartView SDK: \(deviceName) - IP: \(ipAddress)")
+                    }
+                }
+            }
         }
     }
 
@@ -614,7 +657,7 @@ class DeviceDiscoveryViewModel: ObservableObject {
                     self.probeTVPort(ip: ip, port: 8002)  // Samsung Smart View SSL
                     self.probeTVPort(ip: ip, port: 55000) // Samsung Remote
                     self.probeTVPort(ip: ip, port: 9197)  // Samsung AirPlay
-                    
+
                     // Общие TV порты
                     self.probeTVPort(ip: ip, port: 8080)  // HTTP альтернативный
                     self.probeTVPort(ip: ip, port: 7000)  // AirPlay
@@ -732,7 +775,7 @@ class DeviceDiscoveryViewModel: ObservableObject {
             modelName = "Samsung Smart TV (Remote)"
             deviceType = .tv
             print("🎯 Identified Samsung Remote Control at \(ip):\(port)")
-            
+
         case 9197:
             deviceName = "Samsung TV"
             modelName = "Samsung Smart TV (AirPlay)"
@@ -744,7 +787,7 @@ class DeviceDiscoveryViewModel: ObservableObject {
             modelName = "LG WebOS TV"
             deviceType = .tv
             print("🎯 Identified LG WebOS TV at \(ip):\(port)")
-            
+
         case 7000:
             deviceName = "Smart TV"
             modelName = "AirPlay Device"
@@ -781,6 +824,9 @@ class DeviceDiscoveryViewModel: ObservableObject {
 
     func stopDiscovery() {
         isSearching = false
+
+        // Останавливаем SmartView SDK поиск
+        smartViewManager?.stopDiscovery()
 
         // Останавливаем все браузеры
         for browser in browsers {
