@@ -19,6 +19,9 @@ class DeviceDiscoveryViewModel: ObservableObject {
 
     // SmartView SDK Manager для Samsung устройств
     private var smartViewManager: SmartViewManager?
+    
+    // Маппинг между CastDevice ID и Service объектами для реального подключения
+    private var deviceServiceMap: [UUID: Service] = [:]
 
     init() {
         // Инициализация SmartView SDK
@@ -158,6 +161,8 @@ class DeviceDiscoveryViewModel: ObservableObject {
                     // Добавляем только уникальные устройства
                     if !self.discoveredDevices.contains(where: { $0.name == device.name }) {
                         self.discoveredDevices.append(device)
+                        // Сохраняем маппинг между device ID и Service для реального подключения
+                        self.deviceServiceMap[device.id] = service
                         print("✅ Added Samsung device via SmartView SDK: \(deviceName) - IP: \(ipAddress)")
                     }
                 }
@@ -855,24 +860,64 @@ class DeviceDiscoveryViewModel: ObservableObject {
     func connectToDevice(_ device: CastDevice) {
         selectedDevice = device
         isSearching = true
+        connectionError = nil
 
-        // Симуляция подключения
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            // Обновляем устройство как подключенное
-            if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
-                self.discoveredDevices[index].isConnected = true
+        print("🔗 Attempting to connect to device: \(device.name)")
+
+        // Проверяем, есть ли у нас Service объект для этого устройства (Samsung TV)
+        if let service = deviceServiceMap[device.id] {
+            print("📱 Found SmartView Service, connecting to Samsung TV...")
+            
+            // Реальное подключение через SmartView SDK
+            smartViewManager?.connect(to: service) { [weak self] success, error in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    if success {
+                        // Успешное подключение
+                        if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
+                            self.discoveredDevices[index].isConnected = true
+                        }
+                        self.isConnected = true
+                        self.isSearching = false
+                        print("✅ Successfully connected to Samsung TV: \(device.name)")
+                    } else {
+                        // Ошибка подключения
+                        self.isSearching = false
+                        self.isConnected = false
+                        let errorMessage = error?.localizedDescription ?? "Unknown error"
+                        self.connectionError = "Failed to connect: \(errorMessage)"
+                        print("❌ Failed to connect to Samsung TV: \(errorMessage)")
+                    }
+                }
             }
-            self.isConnected = true
-            self.isSearching = false
+        } else {
+            // Для других типов устройств (не Samsung) - используем симуляцию
+            print("⚠️ No SmartView Service found, using simulated connection...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
+                    self.discoveredDevices[index].isConnected = true
+                }
+                self.isConnected = true
+                self.isSearching = false
+                print("✅ Simulated connection to device: \(device.name)")
+            }
         }
     }
 
     func disconnect() {
+        print("🔌 Disconnecting from device...")
+        
+        // Отключаемся через SmartView SDK если это Samsung TV
+        smartViewManager?.disconnect()
+        
         if let device = selectedDevice,
            let index = discoveredDevices.firstIndex(where: { $0.id == device.id }) {
             discoveredDevices[index].isConnected = false
         }
         selectedDevice = nil
         isConnected = false
+        connectionError = nil
+        print("✅ Disconnected successfully")
     }
 }

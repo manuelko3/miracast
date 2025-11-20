@@ -11,6 +11,7 @@ class SmartViewManager: NSObject, ObservableObject, ServiceSearchDelegate {
 
     private var search: ServiceSearch?
     private var discoveryCompletion: (([Service]) -> Void)?
+    private var currentApplication: Application?
 
     override init() {
         super.init()
@@ -47,22 +48,53 @@ class SmartViewManager: NSObject, ObservableObject, ServiceSearchDelegate {
     /// Подключиться к устройству Samsung
     func connect(to service: Service, completion: @escaping (Bool, Error?) -> Void) {
         print("🔗 Connecting to Samsung device: \(service.name)...")
-
-        // Service готов к использованию сразу, просто сохраняем его
-        DispatchQueue.main.async { [weak self] in
-            self?.connectedService = service
-            self?.isConnected = true
-            print("✅ Successfully connected to Samsung device!")
-            completion(true, nil)
+        print("📱 Establishing connection with TV...")
+        
+        // Сохраняем сервис
+        self.connectedService = service
+        
+        // ВАЖНО: Service готов к использованию сразу после обнаружения!
+        // Для проверки соединения создадим тестовый канал
+        let testChannel = service.createChannel("com.miracast.test")
+        
+        print("🚀 Testing connection to TV...")
+        
+        // Подключаемся к каналу для проверки связи
+        testChannel.connect(nil) { [weak self] client, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Failed to connect to TV: \(error.localizedDescription)")
+                    print("   Make sure:")
+                    print("   1. TV and iPhone are on the same Wi-Fi network")
+                    print("   2. TV has Smart View enabled")
+                    print("   3. No firewall blocking the connection")
+                    self?.isConnected = false
+                    self?.connectedService = nil
+                    completion(false, error)
+                    return
+                }
+                
+                self?.isConnected = true
+                print("✅ Successfully connected to Samsung TV!")
+                print("📺 TV is ready to receive content")
+                print("💡 You can now cast photos, videos, and browse web content")
+                completion(true, nil)
+            }
         }
     }
 
     /// Отключиться от устройства
     func disconnect() {
         print("🔌 Disconnecting from Samsung device...")
-        // Service не требует явного отключения
+
+        // Очищаем ссылку на приложение
+        // Note: Application не имеет явного метода disconnect
+        // Освобождение ресурсов произойдет автоматически при обнулении ссылки
+        currentApplication = nil
         connectedService = nil
         isConnected = false
+
+        print("✅ Disconnected successfully")
     }
 
     /// Запустить приложение на Samsung TV
@@ -80,8 +112,8 @@ class SmartViewManager: NSObject, ObservableObject, ServiceSearchDelegate {
             return
         }
 
-        // Запускаем приложение
-        application.start { success, error in
+        // Подключаемся к приложению
+        application.connect(nil) { client, error in
             DispatchQueue.main.async {
                 if let error = error {
                     print("❌ Failed to launch app: \(error.localizedDescription)")
