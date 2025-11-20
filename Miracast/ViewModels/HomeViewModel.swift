@@ -66,9 +66,8 @@ class HomeViewModel: ObservableObject {
             return
         }
         if service.text == "Youtube" {
-            webServiceURL = URL(string: "https://www.youtube.com")
-            webServiceTitle = "Cast YouTube"
-            showWebService = true
+            // Открываем специальный экран для YouTube с возможностью кастинга
+            showCastYouTube = true
             return
         }
         if service.text == "Tik Tok" {

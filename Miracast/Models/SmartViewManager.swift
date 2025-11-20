@@ -49,16 +49,16 @@ class SmartViewManager: NSObject, ObservableObject, ServiceSearchDelegate {
     func connect(to service: Service, completion: @escaping (Bool, Error?) -> Void) {
         print("🔗 Connecting to Samsung device: \(service.name)...")
         print("📱 Establishing connection with TV...")
-        
+
         // Сохраняем сервис
         self.connectedService = service
-        
+
         // ВАЖНО: Service готов к использованию сразу после обнаружения!
         // Для проверки соединения создадим тестовый канал
         let testChannel = service.createChannel("com.miracast.test")
-        
+
         print("🚀 Testing connection to TV...")
-        
+
         // Подключаемся к каналу для проверки связи
         testChannel.connect(nil) { [weak self] client, error in
             DispatchQueue.main.async {
@@ -73,7 +73,7 @@ class SmartViewManager: NSObject, ObservableObject, ServiceSearchDelegate {
                     completion(false, error)
                     return
                 }
-                
+
                 self?.isConnected = true
                 print("✅ Successfully connected to Samsung TV!")
                 print("📺 TV is ready to receive content")
@@ -251,6 +251,23 @@ class SmartViewManager: NSObject, ObservableObject, ServiceSearchDelegate {
                 }
             }
         }
+    }
+
+    /// Отправить YouTube видео на Samsung TV
+    /// ВАЖНО: Открывает YouTube URL в браузере телевизора
+    func sendYouTubeVideo(_ youtubeURL: URL, completion: @escaping (Bool, Error?) -> Void) {
+        guard connectedService != nil else {
+            completion(false, NSError(domain: "SmartView", code: -1,
+                                     userInfo: [NSLocalizedDescriptionKey: "Not connected to device"]))
+            return
+        }
+
+        print("📺 Opening YouTube in TV browser: \(youtubeURL.absoluteString)")
+        print("💡 TV will open the video in its built-in browser")
+
+        // Samsung Smart TV откроет YouTube URL в браузере
+        // Используем метод sendURL который уже работает
+        sendURL(youtubeURL.absoluteString, completion: completion)
     }
 }
 

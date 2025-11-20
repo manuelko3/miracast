@@ -5,7 +5,7 @@ struct DeviceDiscoveryView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var isPresented: Bool
     @EnvironmentObject var appState: AppState
-    
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -19,7 +19,7 @@ struct DeviceDiscoveryView: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     // Заголовок
                     HStack {
@@ -33,22 +33,22 @@ struct DeviceDiscoveryView: View {
                                 .background(Color.white)
                                 .clipShape(Circle())
                         }
-                        
+
                         Spacer()
-                        
+
                         Text("Connect device")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(.black)
-                        
+
                         Spacer()
-                        
+
                         // Placeholder для баланса
                         Color.clear
                             .frame(width: 32, height: 32)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
-                    
+
                     // Описание
                     Text("Make sure your TV is turned\non and connected to the same Wi-Fi network")
                         .font(.system(size: 14))
@@ -56,7 +56,7 @@ struct DeviceDiscoveryView: View {
                         .multilineTextAlignment(.center)
                         .padding(.top, 16)
                         .padding(.horizontal, 40)
-                    
+
                     // Поисковая строка
                     HStack {
                         Image(systemName: "magnifyingglass")
@@ -71,7 +71,7 @@ struct DeviceDiscoveryView: View {
                     .cornerRadius(12)
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
-                    
+
                     // Список устройств
                     if viewModel.discoveredDevices.isEmpty && viewModel.isSearching {
                         VStack(spacing: 16) {
@@ -114,6 +114,8 @@ struct DeviceDiscoveryView: View {
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                                 appState.isDeviceConnected = true
                                                 appState.connectedDeviceName = device.name
+                                                // Сохраняем Service объект для использования в других экранах (YouTube и т.д.)
+                                                appState.connectedService = viewModel.getService(for: device.id)
                                                 isPresented = false
                                             }
                                         }
@@ -123,17 +125,17 @@ struct DeviceDiscoveryView: View {
                                 .padding(.top, 20)
                                 .padding(.bottom, 40)
                             }
-                            
+
                             // Overlay для процесса подключения
                             if viewModel.isSearching && viewModel.selectedDevice != nil {
                                 Color.black.opacity(0.3)
                                     .ignoresSafeArea()
-                                
+
                                 VStack(spacing: 20) {
                                     ProgressView()
                                         .scaleEffect(1.5)
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    
+
                                     Text("Connecting to \(viewModel.selectedDevice?.name ?? "device")...")
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.white)
@@ -180,7 +182,7 @@ struct DeviceRow: View {
     let device: CastDevice
     var isConnecting: Bool = false
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 16) {
@@ -189,7 +191,7 @@ struct DeviceRow: View {
                     Circle()
                         .fill(Color.blue.opacity(0.1))
                         .frame(width: 50, height: 50)
-                    
+
                     if isConnecting {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
@@ -199,20 +201,20 @@ struct DeviceRow: View {
                             .foregroundColor(.blue)
                     }
                 }
-                
+
                 // Информация об устройстве
                 VStack(alignment: .leading, spacing: 4) {
                     Text(device.name)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.black)
-                    
+
                     Text(isConnecting ? "Connecting..." : device.modelName)
                         .font(.system(size: 14))
                         .foregroundColor(isConnecting ? .blue : .gray)
                 }
-                
+
                 Spacer()
-                
+
                 // Индикатор сигнала
                 if !isConnecting {
                     SignalStrengthIndicator(strength: device.signalStrength)
@@ -231,7 +233,7 @@ struct DeviceRow: View {
 
 struct SignalStrengthIndicator: View {
     let strength: Int
-    
+
     private var barCount: Int {
         switch strength {
         case 0..<25: return 1
@@ -240,7 +242,7 @@ struct SignalStrengthIndicator: View {
         default: return 4
         }
     }
-    
+
     var body: some View {
         HStack(spacing: 2) {
             ForEach(0..<4) { index in

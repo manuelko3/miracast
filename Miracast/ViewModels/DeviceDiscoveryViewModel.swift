@@ -19,13 +19,18 @@ class DeviceDiscoveryViewModel: ObservableObject {
 
     // SmartView SDK Manager для Samsung устройств
     private var smartViewManager: SmartViewManager?
-    
+
     // Маппинг между CastDevice ID и Service объектами для реального подключения
     private var deviceServiceMap: [UUID: Service] = [:]
 
     init() {
         // Инициализация SmartView SDK
         smartViewManager = SmartViewManager()
+    }
+
+    /// Получить Service объект для устройства
+    func getService(for deviceId: UUID) -> Service? {
+        return deviceServiceMap[deviceId]
     }
 
     // Запрос разрешения на доступ к локальной сети
@@ -867,12 +872,12 @@ class DeviceDiscoveryViewModel: ObservableObject {
         // Проверяем, есть ли у нас Service объект для этого устройства (Samsung TV)
         if let service = deviceServiceMap[device.id] {
             print("📱 Found SmartView Service, connecting to Samsung TV...")
-            
+
             // Реальное подключение через SmartView SDK
             smartViewManager?.connect(to: service) { [weak self] success, error in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
-                    
+
                     if success {
                         // Успешное подключение
                         if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
@@ -907,10 +912,10 @@ class DeviceDiscoveryViewModel: ObservableObject {
 
     func disconnect() {
         print("🔌 Disconnecting from device...")
-        
+
         // Отключаемся через SmartView SDK если это Samsung TV
         smartViewManager?.disconnect()
-        
+
         if let device = selectedDevice,
            let index = discoveredDevices.firstIndex(where: { $0.id == device.id }) {
             discoveredDevices[index].isConnected = false

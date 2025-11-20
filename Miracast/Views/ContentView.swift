@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import SmartView
 
 class AppState: ObservableObject {
     @Published var showCastPhotos = false
@@ -19,6 +20,10 @@ class AppState: ObservableObject {
     @Published var showDeviceDiscovery = false // состояние для поиска устройств
     @Published var isDeviceConnected = false // статус подключения
     @Published var connectedDeviceName = "" // имя подключенного устройства
+    @Published var showCastYouTube = false // состояние для YouTube экрана
+
+    // Сохраняем Service объект для использования в других экранах
+    var connectedService: Service?
 }
 
 struct ContentView: View {
@@ -69,6 +74,10 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $appState.showWhiteboard) {
             WhiteboardMainView(isPresented: $appState.showWhiteboard)
+        }
+        .fullScreenCover(isPresented: $appState.showCastYouTube) {
+            CastYouTubeView()
+                .environmentObject(appState)
         }
     }
 }

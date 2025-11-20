@@ -165,6 +165,13 @@ struct HomeView: View {
             DeviceDiscoveryView(isPresented: $appState.showDeviceDiscovery)
                 .environmentObject(appState)
         }
+        // YouTube casting screen
+        .onChange(of: viewModel.showCastYouTube) { newValue in
+            if newValue {
+                appState.showCastYouTube = true
+                viewModel.showCastYouTube = false
+            }
+        }
     }
 }
 
