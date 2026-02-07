@@ -172,6 +172,13 @@ struct HomeView: View {
                 viewModel.showCastYouTube = false
             }
         }
+        // Screen mirroring (ReplayKit) screen
+        .onChange(of: viewModel.showScreenMirroring) { newValue in
+            if newValue {
+                appState.showScreenMirroring = true
+                viewModel.showScreenMirroring = false
+            }
+        }
     }
 }
 

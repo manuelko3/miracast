@@ -141,7 +141,7 @@ class CastYouTubeViewModel: ObservableObject {
     @Published var showAlert: Bool = false
     @Published var alertMessage: String = ""
 
-    private var smartViewManager = SmartViewManager()
+    private let smartViewManager = SmartViewManager()
 
     /// Определяет, является ли текущий URL видео на YouTube
     func detectYouTubeVideo(from url: URL) {
