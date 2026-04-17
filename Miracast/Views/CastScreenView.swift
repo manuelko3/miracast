@@ -1,6 +1,7 @@
 import SwiftUI
+import ReplayKit
 
-/// Экран стриминга экрана iPhone на TV через HLS + DLNA/SmartView.
+/// Экран стриминга экрана iPhone на TV через Broadcast Upload Extension.
 struct CastScreenView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appState: AppState
@@ -13,6 +14,7 @@ struct CastScreenView: View {
             VStack(spacing: 0) {
                 header
                 Divider().opacity(0.1)
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         deviceCard
@@ -22,17 +24,18 @@ struct CastScreenView: View {
                     }
                     .padding(16)
                 }
-                actionButton
+
+                // Системный Broadcast Picker. Это наш главный триггер — тап здесь
+                // показывает лист выбора extension'а. Мы подсовываем свой.
+                broadcastButton
                     .padding(.horizontal, 16)
                     .padding(.bottom, 20)
             }
         }
-        .onDisappear {
-            if vm.isStreaming { vm.stop() }
-        }
+        .onDisappear { vm.stopPolling() }
     }
 
-    // MARK: - Sections
+    // MARK: - Header
 
     private var header: some View {
         ZStack {
@@ -56,6 +59,8 @@ struct CastScreenView: View {
         }
         .frame(height: 52)
     }
+
+    // MARK: - Cards
 
     private var deviceCard: some View {
         HStack(spacing: 12) {
@@ -97,10 +102,15 @@ struct CastScreenView: View {
     private var statusCard: some View {
         let (text, color, symbol): (String, Color, String) = {
             switch vm.state {
-            case .idle:              return ("Ready", .gray, "circle")
-            case .starting(let s):   return (s, .orange, "hourglass")
-            case .streaming(let u):  return ("Streaming → \(u.host ?? "")", .green, "antenna.radiowaves.left.and.right")
-            case .error(let m):      return (m, .red, "exclamationmark.triangle.fill")
+            case .idle:
+                return ("Tap Start Broadcast to begin", .gray, "circle")
+            case .preparing:
+                return ("Waiting for broadcast to start…", .orange, "hourglass")
+            case .broadcasting:
+                return ("Broadcasting to TV (video + system audio)", .green,
+                        "antenna.radiowaves.left.and.right")
+            case .error(let m):
+                return (m, .red, "exclamationmark.triangle.fill")
             }
         }()
 
@@ -127,10 +137,10 @@ struct CastScreenView: View {
             Text("How it works")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.black)
-            step(1, "iPhone captures the screen and encodes it to HLS (H.264, ~4 Mbps).")
-            step(2, "A local HTTP server serves the stream on your Wi-Fi network.")
-            step(3, "TV opens the stream URL and plays it with ~3–5 seconds delay.")
-            Text("Note: audio is not streamed (iOS restriction). Captured only while the app is in the foreground.")
+            step(1, "Tap Start Broadcast below. iOS will show a system sheet — choose \"Miracast\" and tap Start Broadcast.")
+            step(2, "A 3-second countdown starts. You can switch to Safari or any app — the stream keeps going with picture and sound.")
+            step(3, "To stop, tap the red indicator at the top of the screen or open this app and press Stop.")
+            Text("Note: DRM-protected content (Netflix, Disney+, etc.) appears black — iOS protects those frames system-wide.")
                 .font(.system(size: 12))
                 .foregroundColor(.gray)
                 .padding(.top, 4)
@@ -158,22 +168,36 @@ struct CastScreenView: View {
         }
     }
 
-    private var actionButton: some View {
-        Button {
-            if vm.isStreaming { vm.stop() } else { vm.start(appState: appState) }
-        } label: {
-            HStack {
-                Image(systemName: vm.isStreaming ? "stop.fill" : "play.fill")
-                Text(vm.isStreaming ? "Stop Streaming" : "Start Streaming")
-                    .font(.system(size: 17, weight: .semibold))
+    // MARK: - Broadcast button
+
+    private var broadcastButton: some View {
+        let enabled = appState.isDeviceConnected
+
+        return ZStack(alignment: .center) {
+            // Визуальная кнопка, которая запускает пикер через programmatic tap.
+            Button {
+                if enabled { vm.prepareAndShowPicker(appState: appState) }
+            } label: {
+                HStack {
+                    Image(systemName: vm.state == .broadcasting ? "stop.fill" : "play.fill")
+                    Text(vm.state == .broadcasting ? "Broadcasting…" : "Start Broadcast")
+                        .font(.system(size: 17, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(vm.state == .broadcasting ? Color.red : (enabled ? Color.blue : Color.gray))
+                .cornerRadius(14)
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 54)
-            .background(vm.isStreaming ? Color.red : (appState.isDeviceConnected ? Color.blue : Color.gray))
-            .cornerRadius(14)
+            .disabled(!enabled)
+
+            // Невидимая обёртка над RPSystemBroadcastPickerView поверх кнопки —
+            // она всё равно реагирует на тап, если programmatic вызов отключён системой.
+            BroadcastPickerView(tint: .clear, size: 54)
+                .frame(height: 54)
+                .opacity(0.0)
+                .allowsHitTesting(false)
         }
-        .disabled(!appState.isDeviceConnected && !vm.isStreaming)
     }
 
     private var transportLabel: String {
