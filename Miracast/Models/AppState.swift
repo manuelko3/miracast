@@ -16,8 +16,11 @@ final class AppState: ObservableObject {
     @Published var isDeviceConnected = false
     @Published var connectedDeviceName = ""
     @Published var showCastYouTube = false
-    @Published var showScreenMirroring = false
 
-    /// Выбранное устройство SmartView
+    /// Выбранное устройство SmartView SDK (новые Samsung TV, 2015+)
     @Published var connectedService: Service?
+
+    /// Выбранный DLNA MediaRenderer (старые Samsung и прочие DLNA-TV).
+    /// Для стриминга экрана приоритет отдаётся DLNA (универсально), SmartView — fallback.
+    @Published var connectedRenderer: DLNARenderer?
 }

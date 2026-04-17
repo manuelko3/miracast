@@ -110,14 +110,6 @@ struct DeviceDiscoveryView: View {
                                             isConnecting: viewModel.selectedDevice?.id == device.id && viewModel.isSearching
                                         ) {
                                             viewModel.connectToDevice(device)
-                                            // Сохраняем информацию о подключении в AppState
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                                appState.isDeviceConnected = true
-                                                appState.connectedDeviceName = device.name
-                                                // Сохраняем Service объект для использования в других экранах (YouTube и т.д.)
-                                                appState.connectedService = viewModel.getService(for: device.id)
-                                                isPresented = false
-                                            }
                                         }
                                     }
                                 }
@@ -163,7 +155,6 @@ struct DeviceDiscoveryView: View {
             }
         }
         .onAppear {
-            // Запрашиваем разрешение и начинаем поиск
             viewModel.requestLocalNetworkPermission { granted in
                 if granted {
                     viewModel.startDiscovery()
@@ -174,6 +165,14 @@ struct DeviceDiscoveryView: View {
         }
         .onDisappear {
             viewModel.stopDiscovery()
+        }
+        .onChange(of: viewModel.isConnected) { connected in
+            guard connected, let device = viewModel.selectedDevice else { return }
+            appState.isDeviceConnected = true
+            appState.connectedDeviceName = device.name
+            appState.connectedService = viewModel.getService(for: device.id)
+            appState.connectedRenderer = viewModel.getRenderer(for: device.id)
+            isPresented = false
         }
     }
 }

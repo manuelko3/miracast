@@ -61,10 +61,6 @@ struct ContentView: View {
             CastYouTubeView()
                 .environmentObject(appState)
         }
-        .fullScreenCover(isPresented: $appState.showScreenMirroring) {
-            ScreenMirroringView()
-                .environmentObject(appState)
-        }
     }
 }
 

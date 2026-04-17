@@ -46,7 +46,6 @@ class HomeViewModel: ObservableObject {
     @Published var showGamesPermissionAlert = false
     @Published var showGamesScreen = false
     @Published var showBrowser = false
-    @Published var showScreenMirroring = false // Screen Mirroring через ReplayKit
 
     func handleServiceTap(_ service: HomeService) {
         if service.text == "Screen Cast" {

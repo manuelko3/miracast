@@ -1,6 +1,0 @@
-framework module Pods_Miracast {
-  umbrella header "Pods-Miracast-umbrella.h"
-
-  export *
-  module * { export * }
-}

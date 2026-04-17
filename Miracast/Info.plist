@@ -43,6 +43,8 @@
         <string>_googlecast._tcp</string>
         <string>_airplay._tcp</string>
         <string>_raop._tcp</string>
+        <string>_dial-multiscreen._tcp</string>
+        <string>_samsungmsf._tcp</string>
     </array>
     <key>LSApplicationQueriesSchemes</key>
     <array>
