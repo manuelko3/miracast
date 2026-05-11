@@ -1,18 +1,33 @@
 import Foundation
 import Network
 
-/// SSDP M-SEARCH поиск DLNA MediaRenderer'ов в локальной сети.
+/// SSDP M-SEARCH поиск MediaRenderer'ов (DLNA) и DIAL-устройств (Fire TV, Roku, Chromecast).
 /// После получения SSDP-ответа скачивает device description XML и парсит AVTransport controlURL.
 final class DLNADiscovery {
+
+    /// Устройство, поддерживающее DIAL — умеет запускать зарегистрированные приложения (YouTube, Netflix).
+    /// Стриминг произвольного контента не поддерживает.
+    struct DIALHit {
+        let host: String
+        let friendlyName: String
+        let manufacturer: String
+        let modelName: String
+        /// URL device description XML — через GET на него TV вернёт заголовок `Application-URL`.
+        let location: URL
+    }
+
     private let queue = DispatchQueue(label: "miracast.dlna.discovery")
     private var connections: [NWConnection] = []
     private var seenUSN = Set<String>()
     private var isRunning = false
 
     private let onFound: (DLNARenderer) -> Void
+    private let onDIAL: ((DIALHit) -> Void)?
 
-    init(onFound: @escaping (DLNARenderer) -> Void) {
+    init(onFound: @escaping (DLNARenderer) -> Void,
+         onDIAL: ((DIALHit) -> Void)? = nil) {
         self.onFound = onFound
+        self.onDIAL = onDIAL
     }
 
     func start() {
@@ -24,6 +39,7 @@ final class DLNADiscovery {
         let targets = [
             "urn:schemas-upnp-org:device:MediaRenderer:1",
             "urn:schemas-upnp-org:service:AVTransport:1",
+            "urn:dial-multiscreen-org:service:dial:1",
             "ssdp:all"
         ]
         for target in targets {
@@ -121,48 +137,62 @@ final class DLNADiscovery {
               let locationURL = URL(string: locationStr),
               let usnStr = usn else { return }
 
-        // Нас интересуют MediaRenderer'ы; фильтруем по ST/NT или по серверу.
+        // Нас интересуют MediaRenderer'ы (DLNA) и DIAL-устройства.
         let stLower = st?.lowercased() ?? ""
         let serverLower = server?.lowercased() ?? ""
         let isRenderer = stLower.contains("mediarenderer") ||
                          stLower.contains("avtransport") ||
                          serverLower.contains("dlnadoc")
-        if !isRenderer { return }
+        let isDIAL = stLower.contains("dial-multiscreen")
 
+        if !isRenderer && !isDIAL { return }
         if seenUSN.contains(usnStr) { return }
         seenUSN.insert(usnStr)
 
-        fetchDeviceDescription(location: locationURL, usn: usnStr)
+        fetchDeviceDescription(location: locationURL, usn: usnStr, wantsDIAL: isDIAL)
     }
 
     // MARK: - Device description
 
-    private func fetchDeviceDescription(location: URL, usn: String) {
+    private func fetchDeviceDescription(location: URL, usn: String, wantsDIAL: Bool) {
         var req = URLRequest(url: location, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 4)
         req.httpMethod = "GET"
 
         URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
             guard let self = self, let data = data else { return }
-            if let renderer = self.parseDeviceDescription(xml: data, location: location, usn: usn) {
+
+            let parser = DeviceDescriptionParser()
+            let xmlParser = XMLParser(data: data)
+            xmlParser.delegate = parser
+            xmlParser.parse()
+
+            let host = location.host ?? "?"
+
+            // DLNA MediaRenderer — если есть AVTransport.
+            if let renderer = self.buildRenderer(parser: parser, location: location, usn: usn) {
                 DispatchQueue.main.async { self.onFound(renderer) }
+            }
+
+            // DIAL — если устройство с DIAL или если wantsDIAL (пришло по DIAL target).
+            if wantsDIAL || parser.hasDIAL {
+                let hit = DIALHit(
+                    host: host,
+                    friendlyName: parser.friendlyName ?? host,
+                    manufacturer: parser.manufacturer ?? "",
+                    modelName: parser.modelName ?? "",
+                    location: location
+                )
+                DispatchQueue.main.async { self.onDIAL?(hit) }
             }
         }.resume()
     }
 
-    private func parseDeviceDescription(xml: Data, location: URL, usn: String) -> DLNARenderer? {
-        let parser = DeviceDescriptionParser()
-        let xmlParser = XMLParser(data: xml)
-        xmlParser.delegate = parser
-        xmlParser.parse()
+    private func buildRenderer(parser: DeviceDescriptionParser, location: URL, usn: String) -> DLNARenderer? {
         guard let controlPath = parser.avTransportControlURL else { return nil }
-
-        // baseURL: scheme://host:port
-        guard let scheme = location.scheme,
-              let host = location.host else { return nil }
+        guard let scheme = location.scheme, let host = location.host else { return nil }
         let port = location.port.map { ":\($0)" } ?? ""
         guard let baseURL = URL(string: "\(scheme)://\(host)\(port)") else { return nil }
 
-        // controlURL может быть относительным.
         let controlURL: URL
         if let absolute = URL(string: controlPath), absolute.scheme != nil {
             controlURL = absolute
@@ -182,6 +212,7 @@ final class DLNADiscovery {
             avTransportControlURL: controlURL
         )
     }
+
 }
 
 // MARK: - XML parser
@@ -191,6 +222,7 @@ private final class DeviceDescriptionParser: NSObject, XMLParserDelegate {
     var manufacturer: String?
     var modelName: String?
     var avTransportControlURL: String?
+    var hasDIAL: Bool = false
 
     private var currentElement = ""
     private var buffer = ""
@@ -222,8 +254,13 @@ private final class DeviceDescriptionParser: NSObject, XMLParserDelegate {
             case "serviceType": currentServiceType = value
             case "controlURL":  currentControlURL = value
             case "service":
-                if let type = currentServiceType, type.contains("AVTransport"), let url = currentControlURL {
-                    avTransportControlURL = url
+                if let type = currentServiceType {
+                    if type.contains("AVTransport"), let url = currentControlURL {
+                        avTransportControlURL = url
+                    }
+                    if type.contains("dial-multiscreen") {
+                        hasDIAL = true
+                    }
                 }
                 inService = false
             default: break

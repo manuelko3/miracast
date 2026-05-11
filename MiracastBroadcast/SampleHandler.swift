@@ -211,7 +211,14 @@ final class SampleHandler: RPBroadcastSampleHandler {
     // MARK: - TV handshake
 
     private func notifyTV(streamURL: URL) {
-        // Приоритет — DLNA.
+        // Режим `external`: main app сам отправит URL на TV (Chromecast / AirPlay).
+        // Extension просто крутит HLS-сервер.
+        if snapshot?.transport == .external {
+            print("ℹ️ [ext] transport=external, main app notifies TV")
+            return
+        }
+
+        // Режим DLNA — шлём SetAVTransportURI / Play прямо отсюда.
         if let controlString = snapshot?.dlnaControlURL?.absoluteString,
            let controlURL = URL(string: controlString) {
             let renderer = DLNARenderer(

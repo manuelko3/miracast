@@ -8,9 +8,19 @@ import Foundation
 enum BroadcastPreferences {
     static let suiteName = "group.miracast.Miracast"
 
+    /// Какой транспорт extension должен использовать для уведомления TV.
+    /// - `dlna` — extension сам шлёт SOAP SetAVTransportURI/Play по сохранённому controlURL.
+    /// - `external` — main app сам отвечает за уведомление TV (Chromecast / AirPlay). Extension
+    ///               только запускает HTTP-сервер и раздаёт HLS.
+    enum Transport: String {
+        case dlna
+        case external
+    }
+
     private enum Keys {
         static let localIP          = "streaming.localIP"
         static let hlsPort          = "streaming.hlsPort"
+        static let transport        = "streaming.transport"
         static let dlnaControlURL   = "streaming.dlna.controlURL"
         static let dlnaRendererName = "streaming.dlna.rendererName"
         static let smartViewURI     = "streaming.smartView.uri"
@@ -27,6 +37,7 @@ enum BroadcastPreferences {
     struct Snapshot {
         var localIP: String?
         var hlsPort: UInt16?
+        var transport: Transport = .external
         var dlnaControlURL: URL?
         var dlnaRendererName: String?
         var smartViewURI: String?
@@ -37,12 +48,14 @@ enum BroadcastPreferences {
 
     static func save(localIP: String?,
                      hlsPort: UInt16?,
+                     transport: Transport,
                      renderer: DLNARenderer?,
                      smartViewURI: String?,
                      smartViewName: String?) {
         guard let d = defaults else { return }
         d.set(localIP, forKey: Keys.localIP)
         if let p = hlsPort { d.set(Int(p), forKey: Keys.hlsPort) } else { d.removeObject(forKey: Keys.hlsPort) }
+        d.set(transport.rawValue, forKey: Keys.transport)
         if let r = renderer {
             d.set(r.avTransportControlURL.absoluteString, forKey: Keys.dlnaControlURL)
             d.set(r.friendlyName, forKey: Keys.dlnaRendererName)
@@ -61,9 +74,11 @@ enum BroadcastPreferences {
 
     static func load() -> Snapshot {
         let d = defaults
+        let transportRaw = d?.string(forKey: Keys.transport) ?? Transport.external.rawValue
         return Snapshot(
             localIP: d?.string(forKey: Keys.localIP),
             hlsPort: (d?.object(forKey: Keys.hlsPort) as? Int).flatMap { UInt16(exactly: $0) },
+            transport: Transport(rawValue: transportRaw) ?? .external,
             dlnaControlURL: d?.string(forKey: Keys.dlnaControlURL).flatMap(URL.init(string:)),
             dlnaRendererName: d?.string(forKey: Keys.dlnaRendererName),
             smartViewURI: d?.string(forKey: Keys.smartViewURI),

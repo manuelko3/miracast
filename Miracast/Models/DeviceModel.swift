@@ -4,7 +4,7 @@ struct CastDevice: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let modelName: String
-    let ipAddress: String
+    var ipAddress: String
     var isConnected: Bool = false
     var signalStrength: Int // 0-100
 
@@ -33,7 +33,21 @@ struct CastDevice: Identifiable, Hashable {
 
     struct Capabilities: OptionSet, Hashable {
         let rawValue: Int
-        static let smartView = Capabilities(rawValue: 1 << 0) // Samsung SmartView SDK
-        static let dlna      = Capabilities(rawValue: 1 << 1) // UPnP AVTransport
+        static let smartView  = Capabilities(rawValue: 1 << 0) // Samsung SmartView SDK
+        static let dlna       = Capabilities(rawValue: 1 << 1) // UPnP AVTransport (универсально)
+        static let airplay    = Capabilities(rawValue: 1 << 2) // Apple TV / AirPlay 2 ресиверы
+        static let chromecast = Capabilities(rawValue: 1 << 3) // Google Cast (Chromecast / Android TV)
+        static let dial       = Capabilities(rawValue: 1 << 4) // DIAL — запуск приложений (Fire TV и др.)
+
+        /// Короткие бейджи для UI.
+        var badges: [(label: String, color: String)] {
+            var out: [(String, String)] = []
+            if contains(.dlna)       { out.append(("DLNA", "blue")) }
+            if contains(.smartView)  { out.append(("SmartView", "purple")) }
+            if contains(.airplay)    { out.append(("AirPlay", "black")) }
+            if contains(.chromecast) { out.append(("Cast", "red")) }
+            if contains(.dial)       { out.append(("DIAL", "orange")) }
+            return out
+        }
     }
 }

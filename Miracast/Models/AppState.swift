@@ -23,4 +23,14 @@ final class AppState: ObservableObject {
     /// Выбранный DLNA MediaRenderer (старые Samsung и прочие DLNA-TV).
     /// Для стриминга экрана приоритет отдаётся DLNA (универсально), SmartView — fallback.
     @Published var connectedRenderer: DLNARenderer?
+
+    /// Полный набор возможностей подключённого устройства.
+    /// На основе этого CastScreen выбирает транспорт: DLNA > SmartView > Chromecast > AirPlay > DIAL.
+    @Published var connectedCapabilities: CastDevice.Capabilities = []
+
+    /// IP-адрес подключённого устройства (Chromecast, AirPlay, FireTV).
+    @Published var connectedHost: String?
+
+    /// URL device description для DIAL-устройств — нужен для запуска YouTube.
+    @Published var connectedDIALLocation: URL?
 }

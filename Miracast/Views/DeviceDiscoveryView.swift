@@ -172,6 +172,9 @@ struct DeviceDiscoveryView: View {
             appState.connectedDeviceName = device.name
             appState.connectedService = viewModel.getService(for: device.id)
             appState.connectedRenderer = viewModel.getRenderer(for: device.id)
+            appState.connectedCapabilities = viewModel.getCapabilities(for: device.id)
+            appState.connectedHost = viewModel.getHost(for: device.id)
+            appState.connectedDIALLocation = viewModel.getDIALLocation(for: device.id)
             isPresented = false
         }
     }
@@ -210,6 +213,10 @@ struct DeviceRow: View {
                     Text(isConnecting ? "Connecting..." : device.modelName)
                         .font(.system(size: 14))
                         .foregroundColor(isConnecting ? .blue : .gray)
+
+                    if !isConnecting {
+                        CapabilityBadges(capabilities: device.capabilities)
+                    }
                 }
 
                 Spacer()
@@ -227,6 +234,35 @@ struct DeviceRow: View {
         }
         .buttonStyle(PlainButtonStyle())
         .disabled(isConnecting)
+    }
+}
+
+struct CapabilityBadges: View {
+    let capabilities: CastDevice.Capabilities
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(capabilities.badges.enumerated()), id: \.offset) { _, badge in
+                Text(badge.label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(color(for: badge.color))
+                    .cornerRadius(4)
+            }
+        }
+    }
+
+    private func color(for name: String) -> Color {
+        switch name {
+        case "blue":   return .blue
+        case "purple": return .purple
+        case "black":  return .black
+        case "red":    return .red
+        case "orange": return .orange
+        default:       return .gray
+        }
     }
 }
 

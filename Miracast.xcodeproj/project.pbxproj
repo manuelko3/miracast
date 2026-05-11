@@ -66,6 +66,13 @@
 			);
 			target = 96F82CC02F92C9AF005469E6 /* MiracastBroadcast */;
 		};
+		96F82CF12F92CAE9005469E6 /* Exceptions for "MiracastBroadcast" folder in "MiracastBroadcast" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 96F82CC02F92C9AF005469E6 /* MiracastBroadcast */;
+		};
 		C4F9ADF72EB01D1600852720 /* Exceptions for "Miracast" folder in "Miracast" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -78,6 +85,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96F82CC42F92C9AF005469E6 /* MiracastBroadcast */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				96F82CF12F92CAE9005469E6 /* Exceptions for "MiracastBroadcast" folder in "MiracastBroadcast" target */,
+			);
 			path = MiracastBroadcast;
 			sourceTree = "<group>";
 		};

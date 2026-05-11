@@ -1,7 +1,9 @@
 import SwiftUI
 import ReplayKit
 
-/// Экран стриминга экрана iPhone на TV через Broadcast Upload Extension.
+/// Экран стриминга экрана iPhone на TV.
+/// Ветвится по транспорту: DLNA (через extension), Chromecast (CASTV2 из main app),
+/// AirPlay (AVPlayer + системный route picker).
 struct CastScreenView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appState: AppState
@@ -19,14 +21,13 @@ struct CastScreenView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         deviceCard
                         statusCard
+                        routeSpecificCard
                         stepsCard
                         Spacer(minLength: 40)
                     }
                     .padding(16)
                 }
 
-                // Системный Broadcast Picker. Это наш главный триггер — тап здесь
-                // показывает лист выбора extension'а. Мы подсовываем свой.
                 broadcastButton
                     .padding(.horizontal, 16)
                     .padding(.bottom, 20)
@@ -106,9 +107,8 @@ struct CastScreenView: View {
                 return ("Tap Start Broadcast to begin", .gray, "circle")
             case .preparing:
                 return ("Waiting for broadcast to start…", .orange, "hourglass")
-            case .broadcasting:
-                return ("Broadcasting to TV (video + system audio)", .green,
-                        "antenna.radiowaves.left.and.right")
+            case .broadcasting(let route):
+                return (broadcastingText(for: route), .green, "antenna.radiowaves.left.and.right")
             case .error(let m):
                 return (m, .red, "exclamationmark.triangle.fill")
             }
@@ -130,6 +130,35 @@ struct CastScreenView: View {
                 .stroke(color.opacity(0.3), lineWidth: 1)
         )
         .cornerRadius(12)
+    }
+
+    /// Если текущий route AirPlay — показываем пикер с выбором TV.
+    @ViewBuilder
+    private var routeSpecificCard: some View {
+        if case .broadcasting(.airplay) = vm.state {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("AirPlay")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black)
+                Text("Pick your TV from the list below — iOS will route the stream to it.")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.black.opacity(0.7))
+                HStack {
+                    AirPlayPickerView(tintColor: .systemBlue, activeTintColor: .systemGreen)
+                        .frame(width: 44, height: 44)
+                    Text("Tap the AirPlay icon → select TV")
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                    Spacer()
+                }
+            }
+            .padding(16)
+            .background(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.15), lineWidth: 1)
+            )
+            .cornerRadius(12)
+        }
     }
 
     private var stepsCard: some View {
@@ -168,31 +197,36 @@ struct CastScreenView: View {
         }
     }
 
-    // MARK: - Broadcast button
+    // MARK: - Broadcast / Stop button
 
+    @ViewBuilder
     private var broadcastButton: some View {
-        let enabled = appState.isDeviceConnected
+        let isBroadcasting: Bool = {
+            if case .broadcasting = vm.state { return true }
+            return false
+        }()
 
-        return ZStack(alignment: .center) {
-            // Визуальная кнопка, которая запускает пикер через programmatic tap.
+        ZStack(alignment: .center) {
             Button {
-                if enabled { vm.prepareAndShowPicker(appState: appState) }
+                if isBroadcasting {
+                    vm.stopBroadcast()
+                } else if appState.isDeviceConnected {
+                    vm.prepareAndShowPicker(appState: appState)
+                }
             } label: {
                 HStack {
-                    Image(systemName: vm.state == .broadcasting ? "stop.fill" : "play.fill")
-                    Text(vm.state == .broadcasting ? "Broadcasting…" : "Start Broadcast")
+                    Image(systemName: isBroadcasting ? "stop.fill" : "play.fill")
+                    Text(isBroadcasting ? "Stop Broadcast" : "Start Broadcast")
                         .font(.system(size: 17, weight: .semibold))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
-                .background(vm.state == .broadcasting ? Color.red : (enabled ? Color.blue : Color.gray))
+                .background(isBroadcasting ? Color.red : (appState.isDeviceConnected ? Color.blue : Color.gray))
                 .cornerRadius(14)
             }
-            .disabled(!enabled)
+            .disabled(!appState.isDeviceConnected && !isBroadcasting)
 
-            // Невидимая обёртка над RPSystemBroadcastPickerView поверх кнопки —
-            // она всё равно реагирует на тап, если programmatic вызов отключён системой.
             BroadcastPickerView(tint: .clear, size: 54)
                 .frame(height: 54)
                 .opacity(0.0)
@@ -200,11 +234,25 @@ struct CastScreenView: View {
         }
     }
 
+    // MARK: - Helpers
+
     private var transportLabel: String {
+        let caps = appState.connectedCapabilities
         var parts: [String] = []
-        if appState.connectedService != nil  { parts.append("SmartView") }
-        if appState.connectedRenderer != nil { parts.append("DLNA") }
+        if caps.contains(.dlna)       { parts.append("DLNA") }
+        if caps.contains(.smartView)  { parts.append("SmartView") }
+        if caps.contains(.chromecast) { parts.append("Cast") }
+        if caps.contains(.airplay)    { parts.append("AirPlay") }
+        if caps.contains(.dial)       { parts.append("DIAL") }
         if parts.isEmpty { return "Not connected" }
         return parts.joined(separator: " · ")
+    }
+
+    private func broadcastingText(for route: CastScreenViewModel.Route) -> String {
+        switch route {
+        case .dlna:             return "Streaming to TV via DLNA (video + audio)"
+        case .chromecast:       return "Streaming to Chromecast"
+        case .airplay:          return "HLS ready — pick AirPlay route below"
+        }
     }
 }
