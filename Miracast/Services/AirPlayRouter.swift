@@ -4,7 +4,6 @@ import AVKit
 import AVFoundation
 
 /// Обёртка над `AVRoutePickerView` — нативный системный пикер выбора AirPlay.
-/// iOS сама находит Apple TV и AirPlay 2 ресиверы (Samsung/LG/Sony 2018+) в локальной сети.
 struct AirPlayPickerView: UIViewRepresentable {
     var tintColor: UIColor = .systemBlue
     var activeTintColor: UIColor = .systemGreen
@@ -20,8 +19,6 @@ struct AirPlayPickerView: UIViewRepresentable {
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 
-/// Программный триггер системного AirPlay-пикера — имитирует тап по `AVRoutePickerView`,
-/// чтобы показать лист выбора без видимой кнопки.
 enum AirPlayPickerTrigger {
     static func show() {
         let picker = AVRoutePickerView(frame: .zero)
@@ -35,47 +32,81 @@ enum AirPlayPickerTrigger {
     }
 }
 
-/// Маленький помощник: наш main-app HLS-плеер для AirPlay.
+/// AVPlayer-плейбэк HLS-ленты от extension. iOS сама роутит на выбранный AirPlay-приёмник
+/// через `allowsExternalPlayback = true` + пикер `AVRoutePickerView`.
 ///
-/// При AirPlay-only TV мы запускаем Broadcast Upload Extension (экран + системный звук
-/// стримится в локальный HLS-сервер), а в главном приложении создаём `AVPlayer`,
-/// который играет эту ленту и автоматически перенаправляет видео на AirPlay-устройство,
-/// выбранное пользователем через `AVRoutePickerView`.
-///
-/// Важно: AVPlayer в режиме AirPlay требует, чтобы приложение оставалось активным
-/// либо имело entitlement `audio` + `AVAudioSession.sharedInstance().setCategory(.playback)`.
-/// Мы ставим `.playback` — видео-стрим не будет прерван при переключении в другое приложение,
-/// но iOS может приостановить воспроизведение через ~30с без активности. Для устойчивого
-/// screen-casting лучше использовать встроенное iOS Screen Mirroring из Control Center.
-final class AirPlayPlayback: ObservableObject {
+/// Через KVO ловим статус item'а и playback ошибки.
+final class AirPlayPlayback: NSObject, ObservableObject {
     @Published var isPlaying = false
     @Published var errorMessage: String?
 
     private var player: AVPlayer?
+    private var item: AVPlayerItem?
+    private var statusObserver: NSKeyValueObservation?
+    private var rateObserver: NSKeyValueObservation?
+    private var startCompletion: ((Result<Void, Error>) -> Void)?
 
-    func start(streamURL: URL) {
+    func start(streamURL: URL, completion: @escaping (Result<Void, Error>) -> Void) {
         stop()
+        startCompletion = completion
 
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            errorMessage = "Audio session: \(error.localizedDescription)"
+            finishStart(.failure(error))
+            return
         }
 
         let item = AVPlayerItem(url: streamURL)
+        self.item = item
+
         let player = AVPlayer(playerItem: item)
         player.allowsExternalPlayback = true
         player.usesExternalPlaybackWhileExternalScreenIsActive = true
-        player.play()
         self.player = player
-        self.isPlaying = true
+
+        statusObserver = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard let self = self else { return }
+            switch item.status {
+            case .readyToPlay:
+                self.isPlaying = true
+                self.finishStart(.success(()))
+            case .failed:
+                let err = item.error ?? NSError(domain: "AirPlay", code: -1,
+                                                userInfo: [NSLocalizedDescriptionKey: "Playback failed"])
+                self.errorMessage = err.localizedDescription
+                self.finishStart(.failure(err))
+            default: break
+            }
+        }
+        rateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
+            self?.isPlaying = player.rate > 0
+        }
+
+        // Таймаут 8 сек на случай, если status не приходит.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            self?.finishStart(.failure(NSError(domain: "AirPlay", code: -2,
+                                               userInfo: [NSLocalizedDescriptionKey: "Timeout starting playback"])))
+        }
+
+        player.play()
     }
 
     func stop() {
+        statusObserver?.invalidate(); statusObserver = nil
+        rateObserver?.invalidate(); rateObserver = nil
         player?.pause()
         player = nil
+        item = nil
         isPlaying = false
+        errorMessage = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+
+    private func finishStart(_ result: Result<Void, Error>) {
+        guard let cb = startCompletion else { return }
+        startCompletion = nil
+        cb(result)
     }
 }

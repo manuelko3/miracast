@@ -6,15 +6,13 @@ import SmartView
 /// Поиск устройств для каста.
 ///
 /// Несколько протоколов параллельно:
-/// 1. Samsung SmartView SDK — оптимальный путь для Samsung Tizen (2015+).
-/// 2. SSDP / UPnP MediaRenderer — DLNA, работает на старых Samsung (до 2015),
-///    LG, Sony, Philips и т.д.
-/// 3. SSDP / DIAL — Fire TV, Roku, Chromecast, многие Smart TV (запуск приложений).
-/// 4. Bonjour / mDNS — AirPlay (Apple TV и AirPlay 2 TV), Google Cast (Chromecast/Android TV),
-///    Fire TV (_amzn-wplay._tcp).
+/// 1. Samsung SmartView SDK — Samsung Tizen (2015+).
+/// 2. SSDP / UPnP MediaRenderer — DLNA: старые Samsung, LG, Sony, Philips и т.д.
+/// 3. SSDP / DIAL — Fire TV, Roku, Chromecast (запуск приложений).
+/// 4. Bonjour / mDNS — AirPlay, Google Cast, Fire TV.
 ///
-/// Одно физическое устройство может быть найдено несколькими протоколами (напр. Samsung Tizen 2018 —
-/// SmartView + DLNA + AirPlay). Мы объединяем их по IP-адресу и агрегируем capabilities.
+/// Одно физическое устройство может найтись несколькими способами. Их merge'им по IP/имени
+/// и агрегируем в один `CastDevice` с набором `Capabilities`.
 final class DeviceDiscoveryViewModel: ObservableObject {
     @Published var discoveredDevices: [CastDevice] = []
     @Published var isSearching: Bool = false
@@ -34,54 +32,43 @@ final class DeviceDiscoveryViewModel: ObservableObject {
         BonjourDiscovery { [weak self] hit in self?.addBonjour(hit) }
     }()
 
-    // Маппинги device.id → сервисы для реального подключения.
-    private var smartViewServices: [UUID: Service] = [:]
-    private var dlnaRenderers: [UUID: DLNARenderer] = [:]
-    private var dialLocations: [UUID: URL] = [:]
-    private var deviceHosts: [UUID: String] = [:]
-
-    // Чтобы сгруппировать устройства, найденные разными способами, запоминаем IP.
+    /// Транспортные данные устройств по UUID.
+    private var connectables: [UUID: ConnectableDevice] = [:]
+    /// Индекс по IP-адресу для merge.
     private var deviceIndexByIP: [String: UUID] = [:]
-    // Имена, которые уже видели без IP — fallback для merge'а Chromecast'ов и т.д.
+    /// Индекс по имени — fallback merge для устройств без резолва IP.
     private var deviceIndexByName: [String: UUID] = [:]
 
     private var stopTimer: DispatchSourceTimer?
 
     // MARK: - Public
 
-    func getService(for id: UUID) -> Service? { smartViewServices[id] }
-    func getRenderer(for id: UUID) -> DLNARenderer? { dlnaRenderers[id] }
-    func getDIALLocation(for id: UUID) -> URL? { dialLocations[id] }
-    func getHost(for id: UUID) -> String? { deviceHosts[id] }
+    func getService(for id: UUID) -> Service? { connectables[id]?.smartViewService }
+    func getRenderer(for id: UUID) -> DLNARenderer? { connectables[id]?.dlnaRenderer }
+    func getDIALLocation(for id: UUID) -> URL? { connectables[id]?.dialLocation }
+    func getHost(for id: UUID) -> String? { connectables[id]?.host }
     func getCapabilities(for id: UUID) -> CastDevice.Capabilities {
         discoveredDevices.first(where: { $0.id == id })?.capabilities ?? []
     }
 
     func requestLocalNetworkPermission(completion: @escaping (Bool) -> Void) {
-        // Тригерим системный алерт, устанавливая UDP-соединение к multicast-адресу.
         let conn = NWConnection(
             host: NWEndpoint.Host("239.255.255.250"),
             port: NWEndpoint.Port(integerLiteral: 1900),
             using: .udp
         )
-
         var finished = false
         conn.stateUpdateHandler = { state in
             guard !finished else { return }
             switch state {
             case .ready:
-                finished = true
-                conn.cancel()
-                completion(true)
+                finished = true; conn.cancel(); completion(true)
             case .failed, .cancelled:
-                finished = true
-                completion(true) // Разрешение не требуется / уже есть — всё равно пробуем.
+                finished = true; completion(true)
             default: break
             }
         }
         conn.start(queue: .main)
-
-        // Таймаут на случай, если пользователь не ответил на алерт.
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
             if !finished { finished = true; conn.cancel(); completion(true) }
         }
@@ -89,29 +76,20 @@ final class DeviceDiscoveryViewModel: ObservableObject {
 
     func startDiscovery() {
         guard !isSearching else { return }
-        print("🔍 Discovery: start")
+        Log.discovery.info("start")
         isSearching = true
         discoveredDevices.removeAll()
-        smartViewServices.removeAll()
-        dlnaRenderers.removeAll()
-        dialLocations.removeAll()
-        deviceHosts.removeAll()
+        connectables.removeAll()
         deviceIndexByIP.removeAll()
         deviceIndexByName.removeAll()
 
-        // Samsung SmartView SDK.
         smartView.startDiscovery { [weak self] services in
             guard let self = self else { return }
             for svc in services { self.addSmartView(svc) }
         }
-
-        // DLNA + DIAL через SSDP.
         dlna.start()
-
-        // Bonjour: AirPlay, Chromecast, Fire TV.
         bonjour.start()
 
-        // Автостоп через 20 секунд.
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 20)
         timer.setEventHandler { [weak self] in self?.stopDiscovery() }
@@ -122,21 +100,20 @@ final class DeviceDiscoveryViewModel: ObservableObject {
     func stopDiscovery() {
         guard isSearching else { return }
         isSearching = false
-        stopTimer?.cancel()
-        stopTimer = nil
+        stopTimer?.cancel(); stopTimer = nil
         smartView.stopDiscovery()
         dlna.stop()
         bonjour.stop()
-        print("🛑 Discovery: stop, found \(discoveredDevices.count) device(s)")
+        Log.discovery.info("stop, found \(self.discoveredDevices.count, privacy: .public) device(s)")
     }
 
     func connectToDevice(_ device: CastDevice) {
         selectedDevice = device
-        isSearching = true      // переиспользуем флаг для показа индикатора подключения
+        isSearching = true
         connectionError = nil
 
-        // Предпочтительный путь — SmartView (на Tizen даёт PhotoPlayer/VideoPlayer).
-        if let service = smartViewServices[device.id] {
+        // Предпочтительный путь подключения — SmartView (на Tizen даёт PhotoPlayer/VideoPlayer).
+        if let service = connectables[device.id]?.smartViewService {
             smartView.connect(to: service) { [weak self] ok, err in
                 DispatchQueue.main.async {
                     self?.handleConnect(success: ok, error: err, device: device)
@@ -145,16 +122,12 @@ final class DeviceDiscoveryViewModel: ObservableObject {
             return
         }
 
-        // DLNA / AirPlay / Chromecast / DIAL — "подключение" это просто сохранение выбора;
-        // реальная отправка команд идёт при старте стрима.
-        if device.capabilities.isEmpty == false {
-            DispatchQueue.main.async {
-                self.handleConnect(success: true, error: nil, device: device)
-            }
+        // DLNA / AirPlay / Chromecast / DIAL — "подключение" это просто сохранение выбора.
+        if !device.capabilities.isEmpty {
+            DispatchQueue.main.async { self.handleConnect(success: true, error: nil, device: device) }
             return
         }
 
-        // Не должно случаться, но на всякий случай.
         DispatchQueue.main.async {
             self.handleConnect(success: false,
                                error: NSError(domain: "Miracast", code: -1,
@@ -187,10 +160,10 @@ final class DeviceDiscoveryViewModel: ObservableObject {
 
     private func addSmartView(_ service: Service) {
         let ip = URL(string: service.uri)?.host ?? "?"
-        let name = service.name
-        let id = mergeOrCreate(ip: ip, name: name, modelName: "Samsung Smart TV",
+        let id = mergeOrCreate(ip: ip, name: service.name, modelName: "Samsung Smart TV",
                                deviceType: .tv, cap: .smartView)
-        smartViewServices[id] = service
+        connectables[id, default: ConnectableDevice(deviceID: id)].smartViewService = service
+        connectables[id]?.host = ip
     }
 
     private func addDLNA(_ renderer: DLNARenderer) {
@@ -201,8 +174,8 @@ final class DeviceDiscoveryViewModel: ObservableObject {
             .ifEmpty("DLNA Media Renderer")
         let id = mergeOrCreate(ip: ip, name: renderer.friendlyName, modelName: model,
                                deviceType: .tv, cap: .dlna)
-        dlnaRenderers[id] = renderer
-        deviceHosts[id] = ip
+        connectables[id, default: ConnectableDevice(deviceID: id)].dlnaRenderer = renderer
+        connectables[id]?.host = ip
     }
 
     private func addDIAL(_ hit: DLNADiscovery.DIALHit) {
@@ -212,8 +185,8 @@ final class DeviceDiscoveryViewModel: ObservableObject {
             .ifEmpty("DIAL Device")
         let id = mergeOrCreate(ip: hit.host, name: hit.friendlyName, modelName: model,
                                deviceType: .tv, cap: .dial)
-        dialLocations[id] = hit.location
-        deviceHosts[id] = hit.host
+        connectables[id, default: ConnectableDevice(deviceID: id)].dialLocation = hit.location
+        connectables[id]?.host = hit.host
     }
 
     private func addBonjour(_ hit: BonjourDiscovery.Hit) {
@@ -226,7 +199,9 @@ final class DeviceDiscoveryViewModel: ObservableObject {
         }
         let id = mergeOrCreate(ip: hit.ipAddress, name: hit.name, modelName: model,
                                deviceType: .tv, cap: cap)
-        if let ip = hit.ipAddress { deviceHosts[id] = ip }
+        if let ip = hit.ipAddress {
+            connectables[id, default: ConnectableDevice(deviceID: id)].host = ip
+        }
     }
 
     /// Если устройство с таким IP (или именем, если IP неизвестен) уже найдено —
@@ -237,7 +212,6 @@ final class DeviceDiscoveryViewModel: ObservableObject {
                                modelName: String,
                                deviceType: CastDevice.DeviceType,
                                cap: CastDevice.Capabilities) -> UUID {
-        // Пробуем найти по IP, потом по имени.
         if let ip = ip, let existingId = deviceIndexByIP[ip],
            let idx = discoveredDevices.firstIndex(where: { $0.id == existingId }) {
             discoveredDevices[idx].capabilities.insert(cap)
@@ -262,20 +236,10 @@ final class DeviceDiscoveryViewModel: ObservableObject {
             capabilities: cap
         )
         discoveredDevices.append(device)
+        connectables[device.id] = ConnectableDevice(deviceID: device.id, host: ip)
         if let ip = ip { deviceIndexByIP[ip] = device.id }
         deviceIndexByName[name.lowercased()] = device.id
         return device.id
-    }
-
-    // Совместимая перегрузка — IP известен.
-    @discardableResult
-    private func mergeOrCreate(ip: String,
-                               name: String,
-                               modelName: String,
-                               deviceType: CastDevice.DeviceType,
-                               cap: CastDevice.Capabilities) -> UUID {
-        mergeOrCreate(ip: Optional(ip), name: name, modelName: modelName,
-                      deviceType: deviceType, cap: cap)
     }
 }
 

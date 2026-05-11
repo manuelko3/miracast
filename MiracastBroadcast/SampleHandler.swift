@@ -2,37 +2,39 @@ import ReplayKit
 import AVFoundation
 import UniformTypeIdentifiers
 import Network
+import os
 
 /// Broadcast Upload Extension handler.
 ///
 /// Отдельный процесс; получает семплы экрана + системного звука + микрофона
-/// от iOS. Мы:
-/// 1. Кодируем video (H.264) и audio (AAC) в fragmented MP4 HLS-сегменты через `AVAssetWriter`.
-/// 2. Раздаём сегменты через встроенный HTTP-сервер (HLSStreamServer).
-/// 3. Забираем инфу о целевом TV из App Group и посылаем URL на TV через DLNA или SmartView.
+/// от iOS. Кодирует video (H.264) + audio (AAC) в fragmented MP4 HLS-сегменты через
+/// `AVAssetWriter`, раздаёт сегменты через встроенный HTTP-сервер `HLSStreamServer`.
 ///
-/// Лимит памяти extension ≈ 50 MB, поэтому битрейт/буферы подобраны консервативно.
+/// Лимит памяти extension ≈ 50 MB, поэтому битрейт/буферы консервативны.
 final class SampleHandler: RPBroadcastSampleHandler {
+
+    // MARK: - Logger
+
+    private let log = Logger(subsystem: "miracast.Miracast", category: "extension")
 
     // MARK: - Config
 
     private let segmentDuration = CMTime(value: 3, timescale: 2) // 1.5 сек
     private let videoBitRate: Int = 2_500_000
     private let audioBitRate: Int = 96_000
-    private let videoHeight: Int = 1280   // портрет 720×1280
 
     // MARK: - Pipeline
 
     private let server = HLSStreamServer()
     private let dlna = DLNAController()
-    private let writingQueue = DispatchQueue(label: "miracast.ext.writer")
+    private let writingQueue = DispatchQueue(label: "miracast.ext.writer", qos: .userInitiated)
 
     private var writer: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
     private var didStartSession = false
+    private var didNotifyTV = false
 
-    // Снэпшот настроек трансляции, подгружается из App Group.
     private var snapshot: BroadcastPreferences.Snapshot?
 
     // MARK: - RPBroadcastSampleHandler
@@ -40,88 +42,78 @@ final class SampleHandler: RPBroadcastSampleHandler {
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         snapshot = BroadcastPreferences.load()
 
-        // 1. HTTP сервер.
-        let port: UInt16
-        do {
-            port = try server.start(preferredPort: 7000)
-        } catch {
-            fail(with: "Failed to start HTTP server: \(error.localizedDescription)")
-            return
-        }
-        BroadcastPreferences.reportBroadcastStarted(port: port)
+        // HTTP сервер. Writer создаётся лениво из первого video-буфера,
+        // чтобы взять реальные размеры экрана.
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let (port, token) = try await self.server.start(preferredPort: 7000)
+                BroadcastPreferences.reportBroadcastStarted(port: port, token: token)
+                self.log.info("HLS server up :\(port, privacy: .public)")
+            } catch {
+                self.fail(with: "Failed to start HTTP server: \(error.localizedDescription)")
+                return
+            }
 
-        // 2. Writer.
-        do {
-            try setupWriter()
-        } catch {
-            fail(with: "Writer setup failed: \(error.localizedDescription)")
-            return
-        }
-
-        // 3. IP — если main app не успел сохранить, определяем сами.
-        let ip = snapshot?.localIP ?? currentWiFiAddress() ?? "127.0.0.1"
-        guard let streamURL = URL(string: "http://\(ip):\(port)/stream.m3u8") else {
-            fail(with: "Invalid stream URL")
-            return
-        }
-
-        // 4. Извещаем TV — но только после того, как энкодер успеет выдать init+первый сегмент.
-        // Делаем это отложенно, чтобы плеер не получил пустой плейлист.
-        writingQueue.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.notifyTV(streamURL: streamURL)
+            // Дожидаемся первого реального сегмента — только потом уведомляем TV,
+            // чтобы плеер не получил пустой плейлист.
+            await self.server.waitForFirstSegment()
+            self.notifyTVOnce()
         }
     }
 
-    override func broadcastPaused() {
-        // Не поддерживаем паузу явно, поток просто прервётся.
-    }
+    override func broadcastPaused() {}
 
-    override func broadcastResumed() {
-    }
+    override func broadcastResumed() {}
 
     override func broadcastFinished() {
-        writingQueue.sync {
+        let writer = self.writer
+        let videoInput = self.videoInput
+        let audioInput = self.audioInput
+        self.writer = nil
+        self.videoInput = nil
+        self.audioInput = nil
+        self.didStartSession = false
+
+        // Делаем shutdown асинхронно, чтобы уложиться в системный лимит teardown (~1 сек).
+        writingQueue.async { [server, dlna, snapshot] in
             videoInput?.markAsFinished()
             audioInput?.markAsFinished()
             if writer?.status == .writing {
                 let sem = DispatchSemaphore(value: 0)
                 writer?.finishWriting { sem.signal() }
-                _ = sem.wait(timeout: .now() + 2)
+                _ = sem.wait(timeout: .now() + 0.4)
             }
-            writer = nil
-            videoInput = nil
-            audioInput = nil
-            didStartSession = false
-        }
-        server.stop()
+            server.stop()
 
-        // Скажем TV остановиться, если знаем как.
-        if let controlString = snapshot?.dlnaControlURL?.absoluteString,
-           let controlURL = URL(string: controlString) {
-            let renderer = DLNARenderer(
-                id: "stop",
-                friendlyName: snapshot?.dlnaRendererName ?? "",
-                manufacturer: "", modelName: "",
-                location: controlURL, baseURL: controlURL,
-                avTransportControlURL: controlURL
-            )
-            let sem = DispatchSemaphore(value: 0)
-            dlna.stop(on: renderer) { _ in sem.signal() }
-            _ = sem.wait(timeout: .now() + 1)
+            // STOP на TV — best-effort, без долгого ожидания.
+            if let controlURL = snapshot?.dlnaControlURL, snapshot?.transport == .dlna {
+                let renderer = DLNARenderer(
+                    id: "stop",
+                    friendlyName: snapshot?.dlnaRendererName ?? "",
+                    manufacturer: "", modelName: "",
+                    location: controlURL, baseURL: controlURL,
+                    avTransportControlURL: controlURL
+                )
+                let sem = DispatchSemaphore(value: 0)
+                dlna.stop(on: renderer) { _ in sem.signal() }
+                _ = sem.wait(timeout: .now() + 0.3)
+            }
         }
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
 
+        // Swift capture в closure автоматически retain'ит CMSampleBuffer (как class type)
+        // — буфер останется живым до окончания appendVideo/appendAudio. Это критично
+        // потому что ReplayKit повторно использует контейнер CMSampleBuffer после возврата.
         switch sampleBufferType {
         case .video:
             writingQueue.async { [weak self] in self?.appendVideo(sampleBuffer) }
         case .audioApp:
-            // audioApp — это системный звук приложения. Приоритет.
             writingQueue.async { [weak self] in self?.appendAudio(sampleBuffer) }
         case .audioMic:
-            // Микрофон не используем — чтобы не дублировать с audioApp.
             break
         @unknown default:
             break
@@ -130,7 +122,14 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     // MARK: - Writer
 
-    private func setupWriter() throws {
+    /// Создаёт писатель ровно один раз. Если width/height не известны заранее,
+    /// откладывает создание до первого video-буфера, чтобы взять реальные размеры.
+    private func setupWriterIfNeeded(width: Int?, height: Int?) throws {
+        guard writer == nil else { return }
+
+        let w = width  ?? 720
+        let h = height ?? 1280
+
         let contentType = UTType("public.mpeg-4") ?? UTType.movie
         let writer = AVAssetWriter(contentType: contentType)
         writer.outputFileTypeProfile = .mpeg4AppleHLS
@@ -139,13 +138,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
         writer.shouldOptimizeForNetworkUse = true
         writer.delegate = self
 
-        let width = 720
-        let height = videoHeight
-
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
+            AVVideoWidthKey: w,
+            AVVideoHeightKey: h,
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: videoBitRate,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
@@ -183,9 +179,24 @@ final class SampleHandler: RPBroadcastSampleHandler {
         self.videoInput = vInput
         self.audioInput = aInput
         self.didStartSession = false
+        log.info("Writer setup \(w, privacy: .public)x\(h, privacy: .public)")
     }
 
     private func appendVideo(_ buffer: CMSampleBuffer) {
+        // На первом video-буфере, если writer ещё не создан — создаём с реальными размерами.
+        if writer == nil {
+            do {
+                if let desc = CMSampleBufferGetFormatDescription(buffer) {
+                    let dims = CMVideoFormatDescriptionGetDimensions(desc)
+                    try setupWriterIfNeeded(width: Int(dims.width), height: Int(dims.height))
+                } else {
+                    try setupWriterIfNeeded(width: nil, height: nil)
+                }
+            } catch {
+                fail(with: "Writer setup failed: \(error.localizedDescription)")
+                return
+            }
+        }
         guard let writer = writer, let input = videoInput else { return }
         startSessionIfNeeded(with: buffer)
         if input.isReadyForMoreMediaData { _ = input.append(buffer) }
@@ -195,9 +206,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     }
 
     private func appendAudio(_ buffer: CMSampleBuffer) {
-        guard let input = audioInput else { return }
-        // Важно: audio не триггерит startSession — только video.
-        guard didStartSession else { return }
+        guard let input = audioInput, didStartSession else { return }
         if input.isReadyForMoreMediaData { _ = input.append(buffer) }
     }
 
@@ -210,46 +219,61 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     // MARK: - TV handshake
 
-    private func notifyTV(streamURL: URL) {
-        // Режим `external`: main app сам отправит URL на TV (Chromecast / AirPlay).
-        // Extension просто крутит HLS-сервер.
-        if snapshot?.transport == .external {
-            print("ℹ️ [ext] transport=external, main app notifies TV")
+    private func notifyTVOnce() {
+        writingQueue.async { [weak self] in
+            guard let self = self, !self.didNotifyTV else { return }
+            self.didNotifyTV = true
+            self.notifyTV()
+        }
+    }
+
+    private func notifyTV() {
+        guard let snapshot = snapshot else {
+            fail(with: "No snapshot loaded"); return
+        }
+
+        // external — main app сам уведомит TV.
+        if snapshot.transport == .external {
+            log.info("transport=external, skipping TV notify in extension")
             return
         }
 
-        // Режим DLNA — шлём SetAVTransportURI / Play прямо отсюда.
-        if let controlString = snapshot?.dlnaControlURL?.absoluteString,
-           let controlURL = URL(string: controlString) {
-            let renderer = DLNARenderer(
-                id: "ext",
-                friendlyName: snapshot?.dlnaRendererName ?? "",
-                manufacturer: "", modelName: "",
-                location: controlURL, baseURL: controlURL,
-                avTransportControlURL: controlURL
-            )
-            dlna.playMedia(on: renderer,
-                           url: streamURL,
-                           mimeType: "application/vnd.apple.mpegurl",
-                           title: "iPhone Screen") { [weak self] result in
-                if case .failure(let e) = result {
-                    self?.fail(with: "DLNA: \(e.localizedDescription)")
-                }
+        // DLNA — шлём SetAVTransportURI / Play.
+        guard let controlURL = snapshot.dlnaControlURL else {
+            if snapshot.smartViewURI != nil {
+                fail(with: "SmartView-only casting isn't supported in extension. Use DLNA.")
+            } else {
+                fail(with: "No TV target configured")
             }
             return
         }
-        if snapshot?.smartViewURI != nil {
-            fail(with: "SmartView-only casting isn't implemented in extension. Connect via DLNA.")
-            return
+
+        let ip = snapshot.localIP ?? currentWiFiAddress() ?? "127.0.0.1"
+        guard let streamURL = snapshot.streamURL(host: ip) else {
+            fail(with: "Invalid stream URL"); return
         }
 
-        fail(with: "No TV target configured")
+        let renderer = DLNARenderer(
+            id: "ext",
+            friendlyName: snapshot.dlnaRendererName ?? "",
+            manufacturer: "", modelName: "",
+            location: controlURL, baseURL: controlURL,
+            avTransportControlURL: controlURL
+        )
+        dlna.playMedia(on: renderer,
+                       url: streamURL,
+                       mimeType: "application/vnd.apple.mpegurl",
+                       title: "iPhone Screen") { [weak self] result in
+            if case .failure(let e) = result {
+                self?.fail(with: "DLNA: \(e.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Errors
 
     private func fail(with message: String) {
-        print("❌ [ext] \(message)")
+        log.error("\(message, privacy: .public)")
         BroadcastPreferences.reportBroadcastError(message)
         let error = NSError(domain: "MiracastBroadcast", code: -999,
                             userInfo: [NSLocalizedDescriptionKey: message])
@@ -265,17 +289,14 @@ final class SampleHandler: RPBroadcastSampleHandler {
         defer { freeifaddrs(ifaddr) }
         for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let interface = ptr.pointee
-            let family = interface.ifa_addr.pointee.sa_family
-            if family == UInt8(AF_INET) {
-                let name = String(cString: interface.ifa_name)
-                if name == "en0" {
-                    var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    getnameinfo(interface.ifa_addr,
-                                socklen_t(interface.ifa_addr.pointee.sa_len),
-                                &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
-                    address = String(cString: host)
-                    break
-                }
+            if interface.ifa_addr.pointee.sa_family == UInt8(AF_INET),
+               String(cString: interface.ifa_name) == "en0" {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                getnameinfo(interface.ifa_addr,
+                            socklen_t(interface.ifa_addr.pointee.sa_len),
+                            &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
+                address = String(cString: host)
+                break
             }
         }
         return address

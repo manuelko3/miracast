@@ -1,27 +1,33 @@
 import Foundation
 import Network
+import os
 
 /// Лёгкий HTTP сервер для раздачи живого HLS-потока (fMP4).
 ///
 /// Endpoints:
-///   GET /stream.m3u8     — live playlist
-///   GET /init.mp4        — initialization segment (EXT-X-MAP)
-///   GET /seg{N}.m4s      — media segments из кольцевого буфера
+///   GET /<token>/stream.m3u8 — live playlist
+///   GET /<token>/init.mp4    — initialization segment
+///   GET /<token>/seg{N}.m4s  — media segments из кольцевого буфера
 ///
-/// Сегменты хранятся в RAM, старые автоматически удаляются при переполнении.
+/// Безопасность:
+///   1. Listener ограничен Wi-Fi интерфейсом (никакого cellular / VPN раскрытия).
+///   2. Все URL содержат случайный 32-символьный токен в первом сегменте пути.
+///      Без правильного токена сервер возвращает 404 — посторонний в той же сети не
+///      сможет случайно угадать URL и получить экран пользователя.
 final class HLSStreamServer {
+
+    private let log = Logger(subsystem: "miracast.Miracast", category: "hls")
 
     // MARK: - Config
 
-    /// Сколько последних сегментов держать в буфере.
     static let windowSize = 6
-    /// Максимальная длительность одного сегмента (для TARGETDURATION).
     static let targetDuration = 3
 
     // MARK: - Public
 
     private(set) var port: UInt16 = 0
     private(set) var isRunning = false
+    private(set) var token: String = ""
 
     // MARK: - Private state
 
@@ -30,9 +36,11 @@ final class HLSStreamServer {
 
     private var listener: NWListener?
     private var initSegment: Data?
-    private var segments: [Segment] = []   // кольцевой буфер
-    private var nextSegmentIndex: Int = 0  // монотонно растущий
-    private var mediaSequence: Int = 0     // индекс самого старого ещё доступного сегмента
+    private var segments: [Segment] = []
+    private var nextSegmentIndex: Int = 0
+    private var mediaSequence: Int = 0
+    private var firstSegmentContinuation: CheckedContinuation<Void, Never>?
+    private var firstSegmentDelivered = false
 
     private struct Segment {
         let index: Int
@@ -42,49 +50,56 @@ final class HLSStreamServer {
 
     // MARK: - Lifecycle
 
-    /// Стартует на случайном свободном порту и возвращает его при успехе.
-    func start(preferredPort: UInt16 = 7000) throws -> UInt16 {
+    /// Стартует на свободном порту. Корректно ждёт `listener.ready` через continuation,
+    /// никакого busy-wait. Возвращает (port, token).
+    func start(preferredPort: UInt16 = 7000) async throws -> (port: UInt16, token: String) {
+        self.token = Self.makeToken()
+        self.firstSegmentDelivered = false
+        self.firstSegmentContinuation = nil
+
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
+        params.requiredInterfaceType = .wifi   // блокируем cellular / VPN
 
         let listener: NWListener
         if let nwPort = NWEndpoint.Port(rawValue: preferredPort) {
-            do {
-                listener = try NWListener(using: params, on: nwPort)
-            } catch {
-                // Если порт занят — берём любой свободный.
-                listener = try NWListener(using: params)
-            }
+            do { listener = try NWListener(using: params, on: nwPort) }
+            catch { listener = try NWListener(using: params) }
         } else {
             listener = try NWListener(using: params)
         }
-
-        listener.newConnectionHandler = { [weak self] conn in
-            self?.handle(connection: conn)
-        }
-        listener.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                if let p = self?.listener?.port?.rawValue {
-                    self?.port = p
-                    print("🌐 HLS server ready on :\(p)")
-                }
-            case .failed(let e):
-                print("❌ HLS listener failed: \(e)")
-            default: break
-            }
-        }
-
-        listener.start(queue: listenerQueue)
         self.listener = listener
-        self.isRunning = true
 
-        // Ждём ready максимум 1 секунду для получения порта.
-        let deadline = Date().addingTimeInterval(1.0)
-        while port == 0 && Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.02)
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(UInt16, String), Error>) in
+            var resumed = false
+
+            listener.newConnectionHandler = { [weak self] conn in
+                self?.handle(connection: conn)
+            }
+            listener.stateUpdateHandler = { [weak self] state in
+                guard let self = self else { return }
+                switch state {
+                case .ready:
+                    if !resumed, let p = listener.port?.rawValue {
+                        resumed = true
+                        self.port = p
+                        self.isRunning = true
+                        self.log.info("ready on :\(p, privacy: .public)")
+                        cont.resume(returning: (p, self.token))
+                    }
+                case .failed(let e):
+                    if !resumed {
+                        resumed = true
+                        cont.resume(throwing: e)
+                    } else {
+                        self.log.error("listener failed: \(e.localizedDescription, privacy: .public)")
+                    }
+                default: break
+                }
+            }
+
+            listener.start(queue: listenerQueue)
         }
-        return port
     }
 
     func stop() {
@@ -106,6 +121,7 @@ final class HLSStreamServer {
     }
 
     func appendSegment(_ data: Data, duration: Double) {
+        var notifyContinuation: CheckedContinuation<Void, Never>?
         accessQueue.sync {
             let seg = Segment(index: nextSegmentIndex, data: data, duration: duration)
             segments.append(seg)
@@ -113,6 +129,32 @@ final class HLSStreamServer {
             while segments.count > Self.windowSize {
                 let removed = segments.removeFirst()
                 mediaSequence = removed.index + 1
+            }
+            // Первый медиа-сегмент готов → разбудим того, кто ждал.
+            if !firstSegmentDelivered, initSegment != nil {
+                firstSegmentDelivered = true
+                notifyContinuation = firstSegmentContinuation
+                firstSegmentContinuation = nil
+            }
+        }
+        notifyContinuation?.resume()
+    }
+
+    /// Дожидается публикации init-segment'а и первого media-segment'а.
+    /// Возвращается сразу, если они уже есть. Защищает от выдачи "пустого плейлиста".
+    func waitForFirstSegment() async {
+        let alreadyHave: Bool = accessQueue.sync {
+            firstSegmentDelivered
+        }
+        if alreadyHave { return }
+
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            accessQueue.sync {
+                if firstSegmentDelivered {
+                    cont.resume()
+                } else {
+                    firstSegmentContinuation = cont
+                }
             }
         }
     }
@@ -127,15 +169,10 @@ final class HLSStreamServer {
     private func readRequest(conn: NWConnection, buffer: Data) {
         conn.receive(minimumIncompleteLength: 1, maximumLength: 4 * 1024) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
-            if let error = error {
-                print("HLS recv err: \(error)")
-                conn.cancel()
-                return
-            }
+            if error != nil { conn.cancel(); return }
             var acc = buffer
             if let data = data { acc.append(data) }
 
-            // Смотрим, пришёл ли полностью хедер (двойной CRLF).
             if let range = acc.range(of: Data([0x0d, 0x0a, 0x0d, 0x0a])) {
                 let head = acc[..<range.lowerBound]
                 if let text = String(data: head, encoding: .utf8) {
@@ -144,10 +181,7 @@ final class HLSStreamServer {
                 }
             }
 
-            if isComplete {
-                conn.cancel()
-                return
-            }
+            if isComplete { conn.cancel(); return }
             if acc.count > 64 * 1024 { conn.cancel(); return }
             self.readRequest(conn: conn, buffer: acc)
         }
@@ -157,23 +191,30 @@ final class HLSStreamServer {
         let firstLine = headerText.components(separatedBy: "\r\n").first ?? ""
         let parts = firstLine.components(separatedBy: " ")
         guard parts.count >= 2, parts[0].uppercased() == "GET" else {
-            send(conn: conn, status: "400 Bad Request", body: Data())
-            return
+            send(conn: conn, status: "400 Bad Request", body: Data()); return
         }
-        let path = parts[1]
-        print("HLS GET \(path)")
+        let rawPath = parts[1]
 
-        if path == "/stream.m3u8" {
+        // Удаляем query string (если есть).
+        let path = rawPath.split(separator: "?", maxSplits: 1).first.map(String.init) ?? rawPath
+
+        // Все ресурсы должны начинаться с /<token>/.
+        let prefix = "/\(token)/"
+        guard path.hasPrefix(prefix) else {
+            send(conn: conn, status: "404 Not Found", body: Data()); return
+        }
+        let relative = String(path.dropFirst(prefix.count))
+
+        switch relative {
+        case "stream.m3u8":
             let playlist = renderPlaylist()
             send(conn: conn,
                  status: "200 OK",
                  headers: ["Content-Type": "application/vnd.apple.mpegurl",
                            "Cache-Control": "no-cache"],
                  body: Data(playlist.utf8))
-            return
-        }
 
-        if path == "/init.mp4" {
+        case "init.mp4":
             let data = accessQueue.sync { initSegment } ?? Data()
             if data.isEmpty { send(conn: conn, status: "404 Not Found", body: Data()); return }
             send(conn: conn,
@@ -181,23 +222,20 @@ final class HLSStreamServer {
                  headers: ["Content-Type": "video/mp4",
                            "Cache-Control": "no-cache"],
                  body: data)
-            return
-        }
 
-        if path.hasPrefix("/seg"), path.hasSuffix(".m4s") {
-            let numStr = path.dropFirst(4).dropLast(4)
-            if let n = Int(numStr),
+        default:
+            if relative.hasPrefix("seg"), relative.hasSuffix(".m4s"),
+               let n = Int(relative.dropFirst(3).dropLast(4)),
                let segment = accessQueue.sync(execute: { segments.first(where: { $0.index == n }) }) {
                 send(conn: conn,
                      status: "200 OK",
                      headers: ["Content-Type": "video/iso.segment",
                                "Cache-Control": "no-cache"],
                      body: segment.data)
-                return
+            } else {
+                send(conn: conn, status: "404 Not Found", body: Data())
             }
         }
-
-        send(conn: conn, status: "404 Not Found", body: Data())
     }
 
     private func renderPlaylist() -> String {
@@ -229,5 +267,12 @@ final class HLSStreamServer {
         var out = Data(h.utf8)
         out.append(body)
         conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
+    }
+
+    // MARK: - Token
+
+    private static func makeToken() -> String {
+        let bytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
+        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 }

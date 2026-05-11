@@ -38,6 +38,10 @@ final class ChromecastController {
     private var currentTransportID: String?
     private var currentSessionID: String?
     private var requestCounter: Int = 1
+    /// requestId, отправленный с LOAD-сообщением. MEDIA_STATUS считается ответом на наш LOAD
+    /// только если у него `requestId == loadRequestID`. Это защищает от ложного "успех" из
+    /// предыдущей сессии Chromecast, которая могла висеть.
+    private var loadRequestID: Int?
 
     private var pendingLoad: ((Result<Void, Error>) -> Void)?
     private var heartbeatTimer: DispatchSourceTimer?
@@ -220,9 +224,11 @@ final class ChromecastController {
         // 2. LOAD медиа.
         guard let media = pendingMedia else { return }
         let streamType = media.isLive ? "LIVE" : "BUFFERED"
+        let rid = nextRequestID()
+        loadRequestID = rid
         let loadPayload: [String: Any] = [
             "type": "LOAD",
-            "requestId": nextRequestID(),
+            "requestId": rid,
             "sessionId": sessionId,
             "autoplay": true,
             "currentTime": 0,
@@ -239,17 +245,32 @@ final class ChromecastController {
         sendJSON(payload: loadPayload,
                  namespace: "urn:x-cast:com.google.cast.media",
                  destinationID: transportId)
+        Log.chromecast.info("LOAD sent requestId=\(rid, privacy: .public) url=\(media.url, privacy: .public)")
     }
 
     private func handleMediaStatus(_ json: [String: Any]) {
         guard let type = json["type"] as? String else { return }
+        let responseRid = (json["requestId"] as? Int) ?? -1
+
+        if type == "LOAD_FAILED" || type == "INVALID_REQUEST" || type == "LOAD_CANCELLED" {
+            // Если есть requestId — реагируем только на свой; если его нет, считаем что наш и есть.
+            if responseRid == loadRequestID || loadRequestID == nil {
+                let msg = (json["reason"] as? String) ?? type
+                finishLoad(.failure(NSError(domain: "Chromecast", code: -2,
+                                            userInfo: [NSLocalizedDescriptionKey: "Load failed: \(msg)"])))
+            }
+            return
+        }
+
         if type == "MEDIA_STATUS" {
-            // Любой MEDIA_STATUS после LOAD — успех.
+            // Принимаем только MEDIA_STATUS с нашим requestId — иначе это эхо предыдущей сессии.
+            guard let expected = loadRequestID, responseRid == expected else { return }
+            // Уточняем что плеер действительно играет / буферизует наш контент.
+            let statusArray = json["status"] as? [[String: Any]] ?? []
+            let playerState = statusArray.first?["playerState"] as? String ?? ""
+            Log.chromecast.info("MEDIA_STATUS playerState=\(playerState, privacy: .public)")
+            // Любое валидное состояние после LOAD значит "приёмник принял медиа".
             finishLoad(.success(()))
-        } else if type == "LOAD_FAILED" || type == "INVALID_REQUEST" {
-            let msg = (json["reason"] as? String) ?? type
-            finishLoad(.failure(NSError(domain: "Chromecast", code: -2,
-                                        userInfo: [NSLocalizedDescriptionKey: "Load failed: \(msg)"])))
         }
     }
 
@@ -302,6 +323,8 @@ final class ChromecastController {
         receiveBuffer.removeAll()
         currentTransportID = nil
         currentSessionID = nil
+        pendingMedia = nil
+        loadRequestID = nil
     }
 
     // MARK: - Protobuf (минимальный ручной кодер/декодер)

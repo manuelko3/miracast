@@ -2,14 +2,13 @@ import Foundation
 import Network
 
 /// Поиск устройств через Bonjour/mDNS. Ловим:
-///   _airplay._tcp   — Apple TV, AirPlay 2 TV (некоторые Samsung/LG/Sony с 2018+)
+///   _airplay._tcp   — Apple TV, AirPlay 2 TV (Samsung/LG/Sony 2018+)
 ///   _raop._tcp      — Remote Audio Output (Apple TV, HomePod, AirPlay колонки)
 ///   _googlecast._tcp — Chromecast, Android TV, Google TV, Nest Hub
 ///   _amzn-wplay._tcp — Amazon Fire TV
 ///
-/// Для Chromecast и Fire TV мы получаем только факт существования —
-/// стриминг на них требует Google Cast SDK / DIAL API, которые пока не реализованы.
-/// Устройство в списке будет помечено соответствующими capabilities.
+/// Резолв IP делается через NWConnection с минимальным таймаутом 1с,
+/// разовый запрос на endpoint (не держим соединение, только узнаём адрес).
 final class BonjourDiscovery {
 
     struct Hit {
@@ -22,6 +21,7 @@ final class BonjourDiscovery {
     private let onFound: (Hit) -> Void
     private var browsers: [NWBrowser] = []
     private let queue = DispatchQueue(label: "miracast.bonjour")
+    private var resolvedEndpoints = Set<String>()   // дедуп резолвов
 
     init(onFound: @escaping (Hit) -> Void) {
         self.onFound = onFound
@@ -29,10 +29,11 @@ final class BonjourDiscovery {
 
     func start() {
         stop()
+        resolvedEndpoints.removeAll()
 
         let services: [(String, Hit.Kind)] = [
             ("_airplay._tcp",      .airplay),
-            ("_raop._tcp",         .airplay),     // тоже AirPlay
+            ("_raop._tcp",         .airplay),
             ("_googlecast._tcp",   .chromecast),
             ("_amzn-wplay._tcp",   .fireTV)
         ]
@@ -58,10 +59,13 @@ final class BonjourDiscovery {
             for result in results {
                 guard case let .service(name, _, _, _) = result.endpoint else { continue }
                 let display = self.cleanName(name)
-                // Фильтруем ненужное — принтеры, компы, колонки (но колонки через raop мы пропускаем лишь частично).
-                if self.shouldSkip(name: display, kind: kind) { continue }
+                if self.shouldSkip(name: display) { continue }
 
-                // Разрешаем endpoint в IP через отдельное соединение — это даст хост.
+                // Дедуп: один и тот же endpoint резолвим один раз.
+                let key = "\(type)|\(name)"
+                if self.resolvedEndpoints.contains(key) { continue }
+                self.resolvedEndpoints.insert(key)
+
                 self.resolveHost(for: result) { ip in
                     DispatchQueue.main.async {
                         self.onFound(Hit(name: display, ipAddress: ip, kind: kind))
@@ -74,14 +78,21 @@ final class BonjourDiscovery {
         browsers.append(browser)
     }
 
+    /// Одноразовый резолв endpoint'а в IP. Используем NWConnection потому что у NWBrowser
+    /// нет публичного API получить адрес сервиса без `NWListener.NewConnectionHandler`'а.
     private func resolveHost(for result: NWBrowser.Result, completion: @escaping (String?) -> Void) {
         let conn = NWConnection(to: result.endpoint, using: .tcp)
         var done = false
+        let finish: (String?) -> Void = { ip in
+            if done { return }
+            done = true
+            conn.cancel()
+            completion(ip)
+        }
+
         conn.stateUpdateHandler = { state in
-            guard !done else { return }
             switch state {
             case .ready:
-                done = true
                 let ip: String? = {
                     guard let endpoint = conn.currentPath?.remoteEndpoint else { return nil }
                     if case let .hostPort(host, _) = endpoint {
@@ -94,23 +105,15 @@ final class BonjourDiscovery {
                     }
                     return nil
                 }()
-                conn.cancel()
-                completion(ip)
+                finish(ip)
             case .failed, .cancelled:
-                done = true
-                completion(nil)
+                finish(nil)
             default: break
             }
         }
         conn.start(queue: queue)
 
-        queue.asyncAfter(deadline: .now() + 1.5) {
-            if !done {
-                done = true
-                conn.cancel()
-                completion(nil)
-            }
-        }
+        queue.asyncAfter(deadline: .now() + 1.0) { finish(nil) }
     }
 
     private func cleanName(_ name: String) -> String {
@@ -118,9 +121,8 @@ final class BonjourDiscovery {
             .replacingOccurrences(of: "\\ ", with: " ")
     }
 
-    private func shouldSkip(name: String, kind: Hit.Kind) -> Bool {
+    private func shouldSkip(name: String) -> Bool {
         let lower = name.lowercased()
-        // Пропускаем чистые колонки/наушники (raop) и не-TV AirPlay сервисы.
         let skip = ["airpods", "homepod", "printer", "scanner",
                     "macbook", "imac", "mac mini", "iphone", "ipad"]
         return skip.contains(where: { lower.contains($0) })

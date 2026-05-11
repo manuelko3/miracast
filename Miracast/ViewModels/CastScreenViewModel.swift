@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import UIKit
+import os
 
 /// Подготовка к broadcast и отслеживание его состояния.
 ///
@@ -9,7 +10,7 @@ import UIKit
 /// 1. Выбирает оптимальный транспорт по capabilities подключённого TV.
 /// 2. Сохраняет настройки в shared UserDefaults (App Group) и триггерит системный Broadcast Picker.
 /// 3. Следит за shared-статусом: стартовал ли extension, и когда HLS-сервер поднят,
-///    уведомляет TV напрямую (Chromecast LOAD / AirPlay route / DLNA уже сам шлёт SOAP).
+///    уведомляет TV (Chromecast LOAD / AirPlay route) или просто фиксирует факт для DLNA.
 final class CastScreenViewModel: ObservableObject {
 
     enum Route: Equatable {
@@ -20,7 +21,8 @@ final class CastScreenViewModel: ObservableObject {
 
     enum State: Equatable {
         case idle
-        case preparing
+        case preparing       // ждём пока extension поднимет сервер
+        case routeStarting   // сервер поднят, отправляем команду на TV / ждём AirPlay route
         case broadcasting(Route)
         case error(String)
     }
@@ -35,40 +37,11 @@ final class CastScreenViewModel: ObservableObject {
 
     deinit { pollTimer?.invalidate() }
 
-    /// Подготавливает App Group defaults и показывает пикер.
+    // MARK: - Entry point
+
     func prepareAndShowPicker(appState: AppState) {
-        let caps = appState.connectedCapabilities
-        guard caps.isEmpty == false || appState.connectedRenderer != nil || appState.connectedService != nil else {
+        guard let plan = Self.selectBestTransport(appState: appState) else {
             state = .error("Please connect to a TV first (Home → Connect device)")
-            return
-        }
-
-        // Выбор транспорта по приоритету.
-        // DLNA > SmartView > Chromecast > AirPlay.
-        let route: Route
-        let storageTransport: BroadcastPreferences.Transport
-        let saveRenderer: DLNARenderer?
-
-        if caps.contains(.dlna), let renderer = appState.connectedRenderer {
-            route = .dlna
-            storageTransport = .dlna
-            saveRenderer = renderer
-        } else if caps.contains(.chromecast), let host = appState.connectedHost {
-            route = .chromecast(host: host)
-            storageTransport = .external
-            saveRenderer = nil
-        } else if caps.contains(.airplay) {
-            route = .airplay
-            storageTransport = .external
-            saveRenderer = nil
-        } else if caps.contains(.smartView) {
-            state = .error("This TV supports only Samsung SmartView. Pick a DLNA-compatible renderer (most TVs have one).")
-            return
-        } else if caps.contains(.dial) {
-            state = .error("This TV supports only DIAL (YouTube/Netflix app launch). Screen streaming needs DLNA / AirPlay / Chromecast.")
-            return
-        } else {
-            state = .error("No supported transport for this device")
             return
         }
 
@@ -76,17 +49,16 @@ final class CastScreenViewModel: ObservableObject {
         BroadcastPreferences.save(
             localIP: ip,
             hlsPort: 7000,
-            transport: storageTransport,
-            renderer: saveRenderer,
+            transport: plan.storage,
+            renderer: plan.dlnaRenderer,
             smartViewURI: appState.connectedService?.uri,
             smartViewName: appState.connectedService?.name
         )
 
         state = .preparing
-        pendingRoute = route
+        pendingRoute = plan.route
         didLaunchRoute = false
         startPolling()
-
         BroadcastPickerTrigger.programmaticallyTap()
     }
 
@@ -103,7 +75,32 @@ final class CastScreenViewModel: ObservableObject {
         pollTimer = nil
     }
 
-    // MARK: - Status polling
+    // MARK: - Transport selection (pure)
+
+    struct Plan {
+        let route: Route
+        let storage: BroadcastPreferences.Transport
+        let dlnaRenderer: DLNARenderer?
+    }
+
+    /// Чистая функция (тестируется): выбирает лучший доступный транспорт по приоритету
+    /// DLNA → Chromecast → AirPlay. Возвращает `nil`, если ни один не годится.
+    static func selectBestTransport(appState: AppState) -> Plan? {
+        let caps = appState.connectedCapabilities
+
+        if caps.contains(.dlna), let renderer = appState.connectedRenderer {
+            return Plan(route: .dlna, storage: .dlna, dlnaRenderer: renderer)
+        }
+        if caps.contains(.chromecast), let host = appState.connectedHost {
+            return Plan(route: .chromecast(host: host), storage: .external, dlnaRenderer: nil)
+        }
+        if caps.contains(.airplay) {
+            return Plan(route: .airplay, storage: .external, dlnaRenderer: nil)
+        }
+        return nil
+    }
+
+    // MARK: - Polling
 
     private func startPolling() {
         stopPolling()
@@ -115,37 +112,36 @@ final class CastScreenViewModel: ObservableObject {
     private func tick() {
         if let err = BroadcastPreferences.lastError {
             stopPolling()
-            DispatchQueue.main.async { self.state = .error(err) }
+            self.state = .error(err)
             return
         }
 
         guard BroadcastPreferences.isBroadcasting else { return }
         guard let route = pendingRoute else { return }
 
-        // Первый раз — уведомляем TV и переходим в broadcasting.
+        // Один раз при первом обнаружении isBroadcasting.
         if !didLaunchRoute {
             didLaunchRoute = true
             launchRoute(route)
         }
-        if case .broadcasting = state { return }
-        DispatchQueue.main.async { self.state = .broadcasting(route) }
     }
 
     private func launchRoute(_ route: Route) {
         let snapshot = BroadcastPreferences.load()
         let ip = snapshot.localIP ?? NetworkUtils.currentWiFiAddress() ?? "127.0.0.1"
-        let port = snapshot.hlsPort ?? 7000
-        guard let streamURL = URL(string: "http://\(ip):\(port)/stream.m3u8") else {
-            DispatchQueue.main.async { self.state = .error("Invalid stream URL") }
+        guard let streamURL = snapshot.streamURL(host: ip) else {
+            self.state = .error("Invalid stream URL — token missing")
             return
         }
+        Log.broadcast.info("launchRoute \(String(describing: route), privacy: .public) URL=\(streamURL.absoluteString, privacy: .private)")
 
         switch route {
         case .dlna:
-            // Extension уже послал SOAP сам.
-            break
+            // Extension сам послал SOAP и уже играет. Сразу переходим в broadcasting.
+            self.state = .broadcasting(route)
 
         case .chromecast(let host):
+            self.state = .routeStarting
             let cc = ChromecastController(host: host)
             self.chromecast = cc
             let media = ChromecastController.MediaInfo(
@@ -155,14 +151,30 @@ final class CastScreenViewModel: ObservableObject {
                 isLive: true
             )
             cc.load(media) { [weak self] result in
-                if case .failure(let err) = result {
-                    DispatchQueue.main.async { self?.state = .error("Chromecast: \(err.localizedDescription)") }
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    switch result {
+                    case .success:
+                        self.state = .broadcasting(route)
+                    case .failure(let err):
+                        self.state = .error("Chromecast: \(err.localizedDescription)")
+                    }
                 }
             }
 
         case .airplay:
             // Main app запускает AVPlayer с HLS; пользователь выберет AirPlay маршрут через пикер в UI.
-            airPlayback.start(streamURL: streamURL)
+            self.state = .routeStarting
+            airPlayback.start(streamURL: streamURL) { [weak self] result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success:
+                        self?.state = .broadcasting(route)
+                    case .failure(let err):
+                        self?.state = .error("AirPlay: \(err.localizedDescription)")
+                    }
+                }
+            }
         }
     }
 }

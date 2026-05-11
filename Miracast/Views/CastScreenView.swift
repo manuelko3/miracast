@@ -107,6 +107,8 @@ struct CastScreenView: View {
                 return ("Tap Start Broadcast to begin", .gray, "circle")
             case .preparing:
                 return ("Waiting for broadcast to start…", .orange, "hourglass")
+            case .routeStarting:
+                return ("Sending stream to TV…", .orange, "arrow.up.forward.circle")
             case .broadcasting(let route):
                 return (broadcastingText(for: route), .green, "antenna.radiowaves.left.and.right")
             case .error(let m):
@@ -135,7 +137,17 @@ struct CastScreenView: View {
     /// Если текущий route AirPlay — показываем пикер с выбором TV.
     @ViewBuilder
     private var routeSpecificCard: some View {
-        if case .broadcasting(.airplay) = vm.state {
+        // Показываем AirPlay-пикер пока маршрут стартует или уже играет.
+        let isAirPlayFlow: Bool = {
+            switch vm.state {
+            case .broadcasting(.airplay): return true
+            case .routeStarting, .preparing: return appState.connectedCapabilities.contains(.airplay)
+                                                && !appState.connectedCapabilities.contains(.dlna)
+                                                && !appState.connectedCapabilities.contains(.chromecast)
+            default: return false
+            }
+        }()
+        if isAirPlayFlow {
             VStack(alignment: .leading, spacing: 10) {
                 Text("AirPlay")
                     .font(.system(size: 16, weight: .semibold))

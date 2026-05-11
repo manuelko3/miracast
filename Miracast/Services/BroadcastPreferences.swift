@@ -1,47 +1,46 @@
 import Foundation
 
-/// Общие данные между main app и Broadcast Upload Extension.
-///
-/// Main app перед запуском broadcast сохраняет сюда информацию о целевом TV;
-/// Extension читает её в `broadcastStarted(withSetupInfo:)` чтобы знать,
-/// куда отправлять URL HLS-потока.
+/// Общие данные между main app и Broadcast Upload Extension (App Group IPC).
 enum BroadcastPreferences {
     static let suiteName = "group.miracast.Miracast"
 
     /// Какой транспорт extension должен использовать для уведомления TV.
-    /// - `dlna` — extension сам шлёт SOAP SetAVTransportURI/Play по сохранённому controlURL.
-    /// - `external` — main app сам отвечает за уведомление TV (Chromecast / AirPlay). Extension
-    ///               только запускает HTTP-сервер и раздаёт HLS.
     enum Transport: String {
-        case dlna
-        case external
+        case dlna       // extension сам шлёт SOAP SetAVTransportURI/Play
+        case external   // main app сам уведомляет TV (Chromecast / AirPlay)
     }
 
     private enum Keys {
         static let localIP          = "streaming.localIP"
         static let hlsPort          = "streaming.hlsPort"
+        static let hlsToken         = "streaming.hlsToken"
         static let transport        = "streaming.transport"
         static let dlnaControlURL   = "streaming.dlna.controlURL"
         static let dlnaRendererName = "streaming.dlna.rendererName"
         static let smartViewURI     = "streaming.smartView.uri"
         static let smartViewName    = "streaming.smartView.name"
-        // Extension → main app: статус трансляции.
         static let broadcastStarted = "streaming.status.started"
         static let broadcastError   = "streaming.status.error"
     }
 
-    private static var defaults: UserDefaults? {
-        UserDefaults(suiteName: suiteName)
-    }
+    /// Кэшируем — `UserDefaults(suiteName:)` не самая дешёвая операция, а poll'ится каждые 0.5с.
+    private static let defaults = UserDefaults(suiteName: suiteName)
 
     struct Snapshot {
         var localIP: String?
         var hlsPort: UInt16?
+        var hlsToken: String?
         var transport: Transport = .external
         var dlnaControlURL: URL?
         var dlnaRendererName: String?
         var smartViewURI: String?
         var smartViewName: String?
+
+        /// Сборка URL стрима из port + token.
+        func streamURL(host: String) -> URL? {
+            guard let port = hlsPort, let token = hlsToken else { return nil }
+            return URL(string: "http://\(host):\(port)/\(token)/stream.m3u8")
+        }
     }
 
     // MARK: - Save (main app)
@@ -65,12 +64,12 @@ enum BroadcastPreferences {
         }
         d.set(smartViewURI, forKey: Keys.smartViewURI)
         d.set(smartViewName, forKey: Keys.smartViewName)
-        // Сбрасываем предыдущий статус
+        d.removeObject(forKey: Keys.hlsToken)
         d.removeObject(forKey: Keys.broadcastStarted)
         d.removeObject(forKey: Keys.broadcastError)
     }
 
-    // MARK: - Load (extension)
+    // MARK: - Load
 
     static func load() -> Snapshot {
         let d = defaults
@@ -78,6 +77,7 @@ enum BroadcastPreferences {
         return Snapshot(
             localIP: d?.string(forKey: Keys.localIP),
             hlsPort: (d?.object(forKey: Keys.hlsPort) as? Int).flatMap { UInt16(exactly: $0) },
+            hlsToken: d?.string(forKey: Keys.hlsToken),
             transport: Transport(rawValue: transportRaw) ?? .external,
             dlnaControlURL: d?.string(forKey: Keys.dlnaControlURL).flatMap(URL.init(string:)),
             dlnaRendererName: d?.string(forKey: Keys.dlnaRendererName),
@@ -88,9 +88,10 @@ enum BroadcastPreferences {
 
     // MARK: - Status (extension → main app)
 
-    static func reportBroadcastStarted(port: UInt16) {
+    static func reportBroadcastStarted(port: UInt16, token: String) {
         let d = defaults
         d?.set(Int(port), forKey: Keys.hlsPort)
+        d?.set(token, forKey: Keys.hlsToken)
         d?.set(true, forKey: Keys.broadcastStarted)
         d?.removeObject(forKey: Keys.broadcastError)
     }
