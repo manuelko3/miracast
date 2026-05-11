@@ -173,7 +173,7 @@ final class ChromecastController {
     }
 
     private func handleProtobufMessage(_ data: Data) {
-        let fields = decodeProto(data)
+        let fields = ChromecastProto.decodeMessage(data)
         guard let payload = fields[6] as? String,
               let namespace = fields[4] as? String,
               let json = parseJSON(payload) else { return }
@@ -280,12 +280,12 @@ final class ChromecastController {
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
 
         var message = Data()
-        encodeVarintField(fieldNumber: 1, value: 0, into: &message)      // protocol_version = 0 (CASTV2_1_0)
-        encodeStringField(fieldNumber: 2, value: senderID, into: &message)
-        encodeStringField(fieldNumber: 3, value: destinationID, into: &message)
-        encodeStringField(fieldNumber: 4, value: namespace, into: &message)
-        encodeVarintField(fieldNumber: 5, value: 0, into: &message)      // payload_type = 0 (STRING)
-        encodeStringField(fieldNumber: 6, value: jsonString, into: &message)
+        message.append(ChromecastProto.encodeVarintField(fieldNumber: 1, value: 0))      // protocol_version = 0 (CASTV2_1_0)
+        message.append(ChromecastProto.encodeStringField(fieldNumber: 2, value: senderID))
+        message.append(ChromecastProto.encodeStringField(fieldNumber: 3, value: destinationID))
+        message.append(ChromecastProto.encodeStringField(fieldNumber: 4, value: namespace))
+        message.append(ChromecastProto.encodeVarintField(fieldNumber: 5, value: 0))      // payload_type = 0 (STRING)
+        message.append(ChromecastProto.encodeStringField(fieldNumber: 6, value: jsonString))
 
         var framed = Data()
         let len = UInt32(message.count)
@@ -327,83 +327,7 @@ final class ChromecastController {
         loadRequestID = nil
     }
 
-    // MARK: - Protobuf (минимальный ручной кодер/декодер)
-
-    private func encodeVarint(_ value: UInt64, into out: inout Data) {
-        var v = value
-        while v >= 0x80 {
-            out.append(UInt8((v & 0x7F) | 0x80))
-            v >>= 7
-        }
-        out.append(UInt8(v & 0x7F))
-    }
-
-    private func encodeVarintField(fieldNumber: Int, value: UInt64, into out: inout Data) {
-        let tag = (UInt64(fieldNumber) << 3) | 0 // wire type 0
-        encodeVarint(tag, into: &out)
-        encodeVarint(value, into: &out)
-    }
-
-    private func encodeStringField(fieldNumber: Int, value: String, into out: inout Data) {
-        let tag = (UInt64(fieldNumber) << 3) | 2 // wire type 2 (length-delimited)
-        encodeVarint(tag, into: &out)
-        let bytes = Data(value.utf8)
-        encodeVarint(UInt64(bytes.count), into: &out)
-        out.append(bytes)
-    }
-
-    /// Декодирует protobuf CastMessage в словарь fieldNumber → Any (Int для varint, String для bytes).
-    private func decodeProto(_ data: Data) -> [Int: Any] {
-        var out: [Int: Any] = [:]
-        var i = data.startIndex
-        while i < data.endIndex {
-            guard let (tag, tagLen) = readVarint(data, at: i) else { break }
-            i += tagLen
-            let fieldNumber = Int(tag >> 3)
-            let wireType = Int(tag & 0x7)
-
-            switch wireType {
-            case 0: // varint
-                guard let (v, n) = readVarint(data, at: i) else { return out }
-                i += n
-                out[fieldNumber] = Int(v)
-            case 2: // length-delimited
-                guard let (len, n) = readVarint(data, at: i) else { return out }
-                i += n
-                let end = i + Int(len)
-                guard end <= data.endIndex else { return out }
-                let sub = data.subdata(in: i..<end)
-                out[fieldNumber] = String(data: sub, encoding: .utf8) ?? ""
-                i = end
-            case 5: // fixed32
-                i += 4
-            case 1: // fixed64
-                i += 8
-            default:
-                return out
-            }
-        }
-        return out
-    }
-
-    private func readVarint(_ data: Data, at start: Data.Index) -> (UInt64, Int)? {
-        var result: UInt64 = 0
-        var shift: UInt64 = 0
-        var idx = start
-        var consumed = 0
-        while idx < data.endIndex {
-            let byte = data[idx]
-            result |= UInt64(byte & 0x7F) << shift
-            consumed += 1
-            idx = data.index(after: idx)
-            if (byte & 0x80) == 0 {
-                return (result, consumed)
-            }
-            shift += 7
-            if shift > 63 { return nil }
-        }
-        return nil
-    }
+    // MARK: - JSON helper
 
     private func parseJSON(_ string: String) -> [String: Any]? {
         guard let data = string.data(using: .utf8) else { return nil }

@@ -240,18 +240,10 @@ final class HLSStreamServer {
 
     private func renderPlaylist() -> String {
         accessQueue.sync {
-            var out = ""
-            out += "#EXTM3U\n"
-            out += "#EXT-X-VERSION:7\n"
-            out += "#EXT-X-TARGETDURATION:\(Self.targetDuration)\n"
-            out += "#EXT-X-MEDIA-SEQUENCE:\(mediaSequence)\n"
-            out += "#EXT-X-PLAYLIST-TYPE:EVENT\n"
-            out += "#EXT-X-MAP:URI=\"init.mp4\"\n"
-            for seg in segments {
-                out += String(format: "#EXTINF:%.3f,\n", seg.duration)
-                out += "seg\(seg.index).m4s\n"
-            }
-            return out
+            let items = segments.map { HLSPlaylist.Segment(index: $0.index, duration: $0.duration) }
+            return HLSPlaylist.render(segments: items,
+                                      mediaSequence: mediaSequence,
+                                      targetDuration: Self.targetDuration)
         }
     }
 

@@ -85,16 +85,28 @@ final class CastScreenViewModel: ObservableObject {
 
     /// Чистая функция (тестируется): выбирает лучший доступный транспорт по приоритету
     /// DLNA → Chromecast → AirPlay. Возвращает `nil`, если ни один не годится.
-    static func selectBestTransport(connection: ConnectionState) -> Plan? {
-        let caps = connection.connectedCapabilities
+    nonisolated static func selectBestTransport(connection: ConnectionState) -> Plan? {
+        MainActor.assumeIsolated {
+            selectBestTransport(
+                capabilities: connection.connectedCapabilities,
+                renderer: connection.connectedRenderer,
+                host: connection.connectedHost
+            )
+        }
+    }
 
-        if caps.contains(.dlna), let renderer = connection.connectedRenderer {
+    /// Перегрузка для unit-тестов и любого кода, у которого нет ConnectionState под рукой.
+    /// Чистая, без зависимости от MainActor.
+    nonisolated static func selectBestTransport(capabilities: CastDevice.Capabilities,
+                                                renderer: DLNARenderer?,
+                                                host: String?) -> Plan? {
+        if capabilities.contains(.dlna), let renderer = renderer {
             return Plan(route: .dlna, storage: .dlna, dlnaRenderer: renderer)
         }
-        if caps.contains(.chromecast), let host = connection.connectedHost {
+        if capabilities.contains(.chromecast), let host = host {
             return Plan(route: .chromecast(host: host), storage: .external, dlnaRenderer: nil)
         }
-        if caps.contains(.airplay) {
+        if capabilities.contains(.airplay) {
             return Plan(route: .airplay, storage: .external, dlnaRenderer: nil)
         }
         return nil

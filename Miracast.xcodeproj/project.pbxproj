@@ -21,6 +21,13 @@
 			remoteGlobalIDString = 96F82CC02F92C9AF005469E6;
 			remoteInfo = MiracastBroadcast;
 		};
+		T1B109832EA7D38B00C18BE1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C4B109712EA7D38B00C18BE1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C4B109782EA7D38B00C18BE1;
+			remoteInfo = Miracast;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -53,6 +60,7 @@
 		96F82CC22F92C9AF005469E6 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
 		C4B109792EA7D38B00C18BE1 /* Miracast.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Miracast.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C4SMARTVIEW01 /* SmartView.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SmartView.xcframework; path = Frameworks/SmartView.xcframework; sourceTree = "<group>"; };
+		T1B1097B2EA7D38B00C18BE1 /* MiracastTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MiracastTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -62,6 +70,7 @@
 				Services/BroadcastPreferences.swift,
 				Services/DLNAController.swift,
 				Services/DLNARenderer.swift,
+				Services/HLSPlaylist.swift,
 				Services/HLSStreamServer.swift,
 			);
 			target = 96F82CC02F92C9AF005469E6 /* MiracastBroadcast */;
@@ -100,6 +109,11 @@
 			path = Miracast;
 			sourceTree = "<group>";
 		};
+		T1B109842EA7D38B00C18BE1 /* MiracastTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MiracastTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +133,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		T1B1097D2EA7D38B00C18BE1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -127,6 +148,7 @@
 			children = (
 				C4B1097B2EA7D38B00C18BE1 /* Miracast */,
 				96F82CC42F92C9AF005469E6 /* MiracastBroadcast */,
+				T1B109842EA7D38B00C18BE1 /* MiracastTests */,
 				C4FRAMEWORKS01 /* Frameworks */,
 				C4B1097A2EA7D38B00C18BE1 /* Products */,
 			);
@@ -137,6 +159,7 @@
 			children = (
 				C4B109792EA7D38B00C18BE1 /* Miracast.app */,
 				96F82CC12F92C9AF005469E6 /* MiracastBroadcast.appex */,
+				T1B1097B2EA7D38B00C18BE1 /* MiracastTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -200,6 +223,29 @@
 			productReference = C4B109792EA7D38B00C18BE1 /* Miracast.app */;
 			productType = "com.apple.product-type.application";
 		};
+		T1B1097A2EA7D38B00C18BE1 /* MiracastTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = T1B1097F2EA7D38B00C18BE1 /* Build configuration list for PBXNativeTarget "MiracastTests" */;
+			buildPhases = (
+				T1B1097C2EA7D38B00C18BE1 /* Sources */,
+				T1B1097D2EA7D38B00C18BE1 /* Frameworks */,
+				T1B1097E2EA7D38B00C18BE1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				T1B109822EA7D38B00C18BE1 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				T1B109842EA7D38B00C18BE1 /* MiracastTests */,
+			);
+			name = MiracastTests;
+			packageProductDependencies = (
+			);
+			productName = MiracastTests;
+			productReference = T1B1097B2EA7D38B00C18BE1 /* MiracastTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -234,6 +280,7 @@
 			targets = (
 				C4B109782EA7D38B00C18BE1 /* Miracast */,
 				96F82CC02F92C9AF005469E6 /* MiracastBroadcast */,
+				T1B1097A2EA7D38B00C18BE1 /* MiracastTests */,
 			);
 		};
 /* End PBXProject section */
@@ -247,6 +294,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C4B109772EA7D38B00C18BE1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		T1B1097E2EA7D38B00C18BE1 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -270,6 +324,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		T1B1097C2EA7D38B00C18BE1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -277,6 +338,11 @@
 			isa = PBXTargetDependency;
 			target = 96F82CC02F92C9AF005469E6 /* MiracastBroadcast */;
 			targetProxy = 96F82CC82F92C9AF005469E6 /* PBXContainerItemProxy */;
+		};
+		T1B109822EA7D38B00C18BE1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C4B109782EA7D38B00C18BE1 /* Miracast */;
+			targetProxy = T1B109832EA7D38B00C18BE1 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -550,6 +616,48 @@
 			};
 			name = Release;
 		};
+		T1B109802EA7D38B00C18BE1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VB6TJZ8M36;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = miracast.MiracastTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Miracast.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Miracast";
+			};
+			name = Debug;
+		};
+		T1B109812EA7D38B00C18BE1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VB6TJZ8M36;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = miracast.MiracastTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Miracast.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Miracast";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -576,6 +684,15 @@
 			buildConfigurations = (
 				C4B109852EA7D38D00C18BE1 /* Debug */,
 				C4B109862EA7D38D00C18BE1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		T1B1097F2EA7D38B00C18BE1 /* Build configuration list for PBXNativeTarget "MiracastTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				T1B109802EA7D38B00C18BE1 /* Debug */,
+				T1B109812EA7D38B00C18BE1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
