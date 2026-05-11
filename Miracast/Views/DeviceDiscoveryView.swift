@@ -4,7 +4,7 @@ struct DeviceDiscoveryView: View {
     @StateObject private var viewModel = DeviceDiscoveryViewModel()
     @Environment(\.dismiss) private var dismiss
     @Binding var isPresented: Bool
-    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var connection: ConnectionState
 
     var body: some View {
         NavigationView {
@@ -168,13 +168,13 @@ struct DeviceDiscoveryView: View {
         }
         .onChange(of: viewModel.isConnected) { connected in
             guard connected, let device = viewModel.selectedDevice else { return }
-            appState.isDeviceConnected = true
-            appState.connectedDeviceName = device.name
-            appState.connectedService = viewModel.getService(for: device.id)
-            appState.connectedRenderer = viewModel.getRenderer(for: device.id)
-            appState.connectedCapabilities = viewModel.getCapabilities(for: device.id)
-            appState.connectedHost = viewModel.getHost(for: device.id)
-            appState.connectedDIALLocation = viewModel.getDIALLocation(for: device.id)
+            connection.isDeviceConnected = true
+            connection.connectedDeviceName = device.name
+            connection.connectedService = viewModel.getService(for: device.id)
+            connection.connectedRenderer = viewModel.getRenderer(for: device.id)
+            connection.connectedCapabilities = viewModel.getCapabilities(for: device.id)
+            connection.connectedHost = viewModel.getHost(for: device.id)
+            connection.connectedDIALLocation = viewModel.getDIALLocation(for: device.id)
             isPresented = false
         }
     }

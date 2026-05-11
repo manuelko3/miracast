@@ -5,7 +5,8 @@ struct MusicView: View {
     @State private var showAppleMusicAlert = false
     @State private var showSettingsAlert = false
     @State private var appleMusicAuthStatus: MPMediaLibraryAuthorizationStatus = MPMediaLibrary.authorizationStatus()
-    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var connection: ConnectionState
+    @EnvironmentObject var navigation: NavigationState
 
     var body: some View {
         ZStack {
@@ -37,10 +38,10 @@ struct MusicView: View {
                 // Синяя карточка
                 ConnectDeviceCard(
                     onTap: {
-                        appState.showDeviceDiscovery = true
+                        navigation.showDeviceDiscovery = true
                     },
-                    isConnected: $appState.isDeviceConnected,
-                    connectedDeviceName: $appState.connectedDeviceName
+                    isConnected: $connection.isDeviceConnected,
+                    connectedDeviceName: $connection.connectedDeviceName
                 )
                 .padding(.top, 20)
                 .padding(.horizontal, 16)
@@ -84,9 +85,9 @@ struct MusicView: View {
             )
         }
         // Device Discovery screen
-        .sheet(isPresented: $appState.showDeviceDiscovery) {
-            DeviceDiscoveryView(isPresented: $appState.showDeviceDiscovery)
-                .environmentObject(appState)
+        .sheet(isPresented: $navigation.showDeviceDiscovery) {
+            DeviceDiscoveryView(isPresented: $navigation.showDeviceDiscovery)
+                .environmentObject(connection)
         }
     }
 
@@ -151,6 +152,7 @@ struct MusicServiceRow: View {
 struct MusicView_Previews: PreviewProvider {
     static var previews: some View {
         MusicView()
-            .environmentObject(AppState())
+            .environmentObject(ConnectionState())
+            .environmentObject(NavigationState())
     }
 }

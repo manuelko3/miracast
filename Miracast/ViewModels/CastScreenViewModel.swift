@@ -39,8 +39,8 @@ final class CastScreenViewModel: ObservableObject {
 
     // MARK: - Entry point
 
-    func prepareAndShowPicker(appState: AppState) {
-        guard let plan = Self.selectBestTransport(appState: appState) else {
+    func prepareAndShowPicker(connection: ConnectionState) {
+        guard let plan = Self.selectBestTransport(connection: connection) else {
             state = .error("Please connect to a TV first (Home → Connect device)")
             return
         }
@@ -51,8 +51,8 @@ final class CastScreenViewModel: ObservableObject {
             hlsPort: 7000,
             transport: plan.storage,
             renderer: plan.dlnaRenderer,
-            smartViewURI: appState.connectedService?.uri,
-            smartViewName: appState.connectedService?.name
+            smartViewURI: connection.connectedService?.uri,
+            smartViewName: connection.connectedService?.name
         )
 
         state = .preparing
@@ -85,13 +85,13 @@ final class CastScreenViewModel: ObservableObject {
 
     /// Чистая функция (тестируется): выбирает лучший доступный транспорт по приоритету
     /// DLNA → Chromecast → AirPlay. Возвращает `nil`, если ни один не годится.
-    static func selectBestTransport(appState: AppState) -> Plan? {
-        let caps = appState.connectedCapabilities
+    static func selectBestTransport(connection: ConnectionState) -> Plan? {
+        let caps = connection.connectedCapabilities
 
-        if caps.contains(.dlna), let renderer = appState.connectedRenderer {
+        if caps.contains(.dlna), let renderer = connection.connectedRenderer {
             return Plan(route: .dlna, storage: .dlna, dlnaRenderer: renderer)
         }
-        if caps.contains(.chromecast), let host = appState.connectedHost {
+        if caps.contains(.chromecast), let host = connection.connectedHost {
             return Plan(route: .chromecast(host: host), storage: .external, dlnaRenderer: nil)
         }
         if caps.contains(.airplay) {

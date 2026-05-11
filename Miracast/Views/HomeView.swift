@@ -3,7 +3,9 @@ import SwiftUI
 struct HomeView: View {
     var onWordTap: () -> Void = {}
     @StateObject private var viewModel = HomeViewModel()
-    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var connection: ConnectionState
+    @EnvironmentObject var navigation: NavigationState
+    @EnvironmentObject var media: MediaPickerState
     // store picked images if needed
     @State private var pickedImages: [UIImage] = []
     @State private var pickedVideoURLs: [URL] = []
@@ -24,10 +26,10 @@ struct HomeView: View {
                 // Синяя карточка
                 ConnectDeviceCard(
                     onTap: {
-                        appState.showDeviceDiscovery = true
+                        navigation.showDeviceDiscovery = true
                     },
-                    isConnected: $appState.isDeviceConnected,
-                    connectedDeviceName: $appState.connectedDeviceName
+                    isConnected: $connection.isDeviceConnected,
+                    connectedDeviceName: $connection.connectedDeviceName
                 )
                 .padding(.top, 20)
                 .padding(.horizontal, 16)
@@ -44,11 +46,11 @@ struct HomeView: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     if service.text == "Documents" {
-                                        appState.showWordDocumentScreen = true
+                                        navigation.showWordDocumentScreen = true
                                     } else if service.text == "Presentations" {
                                         showPresentationScreen = true
                                     } else if service.text == "Whiteboard" {
-                                        appState.showWhiteboard = true
+                                        navigation.showWhiteboard = true
                                     } else {
                                         viewModel.handleServiceTap(service)
                                     }
@@ -75,11 +77,11 @@ struct HomeView: View {
             PhotoPicker(selectionLimit: 0) { images in
                 // store picked images and dismiss
                 self.pickedImages = images
-                self.appState.selectedPhotos = images
+                self.media.selectedPhotos = images
                 // Сначала отметим, что нужно показать экран CastPhotos,
                 // затем закроем picker в следующем тике runloop — это предотвращает
                 // мерцание предыдущего экрана при анимации закрытия sheet и открытия нового.
-                self.appState.showCastPhotos = true
+                self.navigation.showCastPhotos = true
                 DispatchQueue.main.async {
                     self.viewModel.showPhotoPicker = false
                 }
@@ -89,8 +91,8 @@ struct HomeView: View {
         .sheet(isPresented: $viewModel.showVideoPicker) {
             VideoPicker(selectionLimit: 0) { urls in
                 self.pickedVideoURLs = urls
-                self.appState.selectedVideoURLs = urls
-                self.appState.showCastVideos = true
+                self.media.selectedVideoURLs = urls
+                self.navigation.showCastVideos = true
                 DispatchQueue.main.async {
                     self.viewModel.showVideoPicker = false
                 }
@@ -101,8 +103,8 @@ struct HomeView: View {
             PhotoPicker(selectionLimit: 0) { images in
                 // store picked images and open slideshow
                 self.pickedImages = images
-                self.appState.selectedPhotos = images
-                self.appState.showCastSlideshow = true
+                self.media.selectedPhotos = images
+                self.navigation.showCastSlideshow = true
                 DispatchQueue.main.async {
                     self.viewModel.showSlideshowPicker = false
                 }
@@ -161,14 +163,14 @@ struct HomeView: View {
             BrowserView()
         }
         // Device Discovery screen
-        .sheet(isPresented: $appState.showDeviceDiscovery) {
-            DeviceDiscoveryView(isPresented: $appState.showDeviceDiscovery)
-                .environmentObject(appState)
+        .sheet(isPresented: $navigation.showDeviceDiscovery) {
+            DeviceDiscoveryView(isPresented: $navigation.showDeviceDiscovery)
+                .environmentObject(connection)
         }
         // YouTube casting screen
         .onChange(of: viewModel.showCastYouTube) { newValue in
             if newValue {
-                appState.showCastYouTube = true
+                navigation.showCastYouTube = true
                 viewModel.showCastYouTube = false
             }
         }
@@ -247,5 +249,8 @@ struct HomeServiceRow: View {
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
         HomeView()
+            .environmentObject(ConnectionState())
+            .environmentObject(NavigationState())
+            .environmentObject(MediaPickerState())
     }
 }

@@ -5,7 +5,7 @@ import Combine
 /// Экран для просмотра YouTube и трансляции на TV
 struct CastYouTubeView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var connection: ConnectionState
     @StateObject private var viewModel = CastYouTubeViewModel()
 
     var body: some View {
@@ -30,7 +30,7 @@ struct CastYouTubeView: View {
                             Spacer()
 
                             Button(action: {
-                                viewModel.castToTV(appState: appState)
+                                viewModel.castToTV(connection: connection)
                             }) {
                                 HStack(spacing: 12) {
                                     Image(systemName: "tv")
@@ -51,7 +51,7 @@ struct CastYouTubeView: View {
                                 .cornerRadius(30)
                                 .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
                             }
-                            .disabled(!appState.isDeviceConnected || viewModel.isCasting)
+                            .disabled(!connection.isDeviceConnected || viewModel.isCasting)
                             .opacity(viewModel.isCasting ? 0.6 : 1.0)
 
                             Spacer()
@@ -107,7 +107,7 @@ struct CastYouTubeView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if appState.isDeviceConnected {
+                    if connection.isDeviceConnected {
                         HStack(spacing: 4) {
                             Circle()
                                 .fill(Color.green)
@@ -161,8 +161,8 @@ class CastYouTubeViewModel: ObservableObject {
     }
 
     /// Отправляет YouTube видео на TV
-    func castToTV(appState: AppState) {
-        guard appState.isDeviceConnected else {
+    func castToTV(connection: ConnectionState) {
+        guard connection.isDeviceConnected else {
             alertMessage = "Please connect to a TV first"
             showAlert = true
             return
@@ -177,7 +177,7 @@ class CastYouTubeViewModel: ObservableObject {
         isCasting = true
 
         // Используем SmartViewManager для отправки на TV
-        smartViewManager.connectedService = appState.connectedService
+        smartViewManager.connectedService = connection.connectedService
         smartViewManager.sendYouTubeVideo(videoURL) { [weak self] success, error in
             DispatchQueue.main.async {
                 self?.isCasting = false
@@ -267,6 +267,6 @@ struct YouTubeWebView: UIViewRepresentable {
 struct CastYouTubeView_Previews: PreviewProvider {
     static var previews: some View {
         CastYouTubeView()
-            .environmentObject(AppState())
+            .environmentObject(ConnectionState())
     }
 }

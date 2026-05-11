@@ -6,7 +6,8 @@ import ReplayKit
 /// AirPlay (AVPlayer + системный route picker).
 struct CastScreenView: View {
     @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var connection: ConnectionState
+    @EnvironmentObject var navigation: NavigationState
     @StateObject private var vm = CastScreenViewModel()
 
     var body: some View {
@@ -69,11 +70,11 @@ struct CastScreenView: View {
                 Circle()
                     .fill(Color.blue.opacity(0.1))
                     .frame(width: 44, height: 44)
-                Image(systemName: appState.isDeviceConnected ? "tv.fill" : "tv.slash")
-                    .foregroundColor(appState.isDeviceConnected ? .blue : .gray)
+                Image(systemName: connection.isDeviceConnected ? "tv.fill" : "tv.slash")
+                    .foregroundColor(connection.isDeviceConnected ? .blue : .gray)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(appState.isDeviceConnected ? appState.connectedDeviceName : "No device connected")
+                Text(connection.isDeviceConnected ? connection.connectedDeviceName : "No device connected")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.black)
                 Text(transportLabel)
@@ -81,11 +82,11 @@ struct CastScreenView: View {
                     .foregroundColor(.gray)
             }
             Spacer()
-            if !appState.isDeviceConnected {
+            if !connection.isDeviceConnected {
                 Button("Connect") {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        appState.showDeviceDiscovery = true
+                        navigation.showDeviceDiscovery = true
                     }
                 }
                 .font(.system(size: 14, weight: .semibold))
@@ -141,9 +142,9 @@ struct CastScreenView: View {
         let isAirPlayFlow: Bool = {
             switch vm.state {
             case .broadcasting(.airplay): return true
-            case .routeStarting, .preparing: return appState.connectedCapabilities.contains(.airplay)
-                                                && !appState.connectedCapabilities.contains(.dlna)
-                                                && !appState.connectedCapabilities.contains(.chromecast)
+            case .routeStarting, .preparing: return connection.connectedCapabilities.contains(.airplay)
+                                                && !connection.connectedCapabilities.contains(.dlna)
+                                                && !connection.connectedCapabilities.contains(.chromecast)
             default: return false
             }
         }()
@@ -222,8 +223,8 @@ struct CastScreenView: View {
             Button {
                 if isBroadcasting {
                     vm.stopBroadcast()
-                } else if appState.isDeviceConnected {
-                    vm.prepareAndShowPicker(appState: appState)
+                } else if connection.isDeviceConnected {
+                    vm.prepareAndShowPicker(connection: connection)
                 }
             } label: {
                 HStack {
@@ -234,10 +235,10 @@ struct CastScreenView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
-                .background(isBroadcasting ? Color.red : (appState.isDeviceConnected ? Color.blue : Color.gray))
+                .background(isBroadcasting ? Color.red : (connection.isDeviceConnected ? Color.blue : Color.gray))
                 .cornerRadius(14)
             }
-            .disabled(!appState.isDeviceConnected && !isBroadcasting)
+            .disabled(!connection.isDeviceConnected && !isBroadcasting)
 
             BroadcastPickerView(tint: .clear, size: 54)
                 .frame(height: 54)
@@ -249,7 +250,7 @@ struct CastScreenView: View {
     // MARK: - Helpers
 
     private var transportLabel: String {
-        let caps = appState.connectedCapabilities
+        let caps = connection.connectedCapabilities
         var parts: [String] = []
         if caps.contains(.dlna)       { parts.append("DLNA") }
         if caps.contains(.smartView)  { parts.append("SmartView") }
